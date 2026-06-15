@@ -39,6 +39,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
+import { buildTrashTalkMomentPath } from "@/lib/battleTrashTalkMoment";
 import { getRankFromElo } from "@/utils/rankSystem";
 import { ArenaAgentThumbnail } from "@/components/arena/ArenaAgentThumbnail";
 import { getArenaAgentPortrait } from "@/constants/arenaAgentArchetypes";
@@ -701,12 +702,14 @@ function ResultCard({
   myAgentId,
   myAgent,
   opponent,
+  onShareMoment,
 }: {
   result: AiArenaBattleResult;
   battle: AiArenaBattle;
   myAgentId: string | null;
   myAgent: AiArenaAgent | null;
   opponent: AiArenaAgent | null;
+  onShareMoment?: () => void;
 }) {
   const winner =
     result.winnerId === myAgent?.id
@@ -844,9 +847,14 @@ function ResultCard({
         )}
         <button
           type="button"
-          disabled
-          title="Coming soon — Share in Kult Moments"
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[9px] font-tech uppercase tracking-wider text-white/30 cursor-not-allowed"
+          onClick={onShareMoment}
+          disabled={!onShareMoment}
+          title="Share this battle as a Kult Moment"
+          className={`ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[9px] font-tech uppercase tracking-wider transition ${
+            onShareMoment
+              ? "border-[#9a35ff]/40 bg-[#9a35ff]/12 text-[#d6acff] hover:bg-[#9a35ff]/22"
+              : "border-white/10 bg-white/5 text-white/30 cursor-not-allowed"
+          }`}
         >
           <Share2 className="h-2.5 w-2.5" />
           Kult Moment
@@ -857,7 +865,13 @@ function ResultCard({
 }
 
 /** Individual chat message row */
-function ChatBubble({ msg }: { msg: ChatMsg }) {
+function ChatBubble({
+  msg,
+  onShareMoment,
+}: {
+  msg: ChatMsg;
+  onShareMoment?: () => void;
+}) {
   const time = msg.ts.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -872,6 +886,7 @@ function ChatBubble({ msg }: { msg: ChatMsg }) {
           myAgentId={msg.myAgentId}
           myAgent={msg.myAgent}
           opponent={msg.opponent}
+          onShareMoment={onShareMoment}
         />
       </div>
     );
@@ -916,6 +931,7 @@ function GameChatPanel({
   chatEndRef,
   myAgent,
   observerCount,
+  onShareMoment,
 }: {
   messages: ChatMsg[];
   chatInput: string;
@@ -924,6 +940,7 @@ function GameChatPanel({
   chatEndRef: React.RefObject<HTMLDivElement>;
   myAgent: AiArenaAgent | null;
   observerCount: number;
+  onShareMoment?: () => void;
 }) {
   const handleKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -949,7 +966,7 @@ function GameChatPanel({
 
       <div className="flex-1 overflow-y-auto py-2 space-y-0.5 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
         {messages.map((msg) => (
-          <ChatBubble key={msg.id} msg={msg} />
+          <ChatBubble key={msg.id} msg={msg} onShareMoment={onShareMoment} />
         ))}
         <div ref={chatEndRef} />
       </div>
@@ -993,11 +1010,13 @@ function BattleResultOverlay({
   commentary,
   storageHashes,
   onHome,
+  onShareMoment,
 }: {
   result: UnityBattleResult;
   commentary?: string | null;
   storageHashes?: string[];
   onHome: () => void;
+  onShareMoment?: () => void;
 }) {
   const winnerColor = clanColor(result.winnerClan);
   const loserColor  = clanColor(result.loserClan);
@@ -1192,12 +1211,15 @@ function BattleResultOverlay({
 
         {/* ── Action Buttons ── */}
         <div className="flex flex-col gap-2.5 px-6 pb-7">
-          {/* Share with Kult Moments — placeholder, wired up later */}
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex w-full items-center justify-center gap-2.5 rounded-2xl border border-white/8 bg-white/[0.04] py-3.5 font-tech text-[11px] uppercase tracking-widest text-white/25 cursor-not-allowed"
+            onClick={onShareMoment}
+            disabled={!onShareMoment}
+            className={`flex w-full items-center justify-center gap-2.5 rounded-2xl border py-3.5 font-tech text-[11px] uppercase tracking-widest transition ${
+              onShareMoment
+                ? "border-[#9a35ff]/45 bg-[#9a35ff]/15 text-white hover:bg-[#9a35ff]/25 hover:border-[#9a35ff]/60"
+                : "border-white/8 bg-white/[0.04] text-white/25 cursor-not-allowed"
+            }`}
           >
             <Share2 className="h-4 w-4" />
             Share with Kult Moments
@@ -1713,6 +1735,11 @@ export default function ArenaGamePage() {
     ]);
   }, []);
 
+  const navigateToTrashTalkMoment = useCallback(() => {
+    if (!battleId || !myAgentId) return;
+    navigate(buildTrashTalkMomentPath(battleId, myAgentId));
+  }, [battleId, myAgentId, navigate]);
+
   const addResult = useCallback(
     (result: AiArenaBattleResult, b: AiArenaBattle) => {
       setMessages((prev) => [
@@ -1779,6 +1806,12 @@ export default function ArenaGamePage() {
   const isError = battleQ.isError;
   const isLoading = battleQ.isLoading && !battle;
 
+  const isBattleComplete = Boolean(
+    (battle?.status === "COMPLETED" && battle?.result) || battleResult,
+  );
+  const canShareMoment = Boolean(battleId && myAgentId && isBattleComplete);
+  const shareMomentHandler = canShareMoment ? navigateToTrashTalkMoment : undefined;
+
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -1822,6 +1855,17 @@ export default function ArenaGamePage() {
           <span className="font-tech text-[9px] uppercase tracking-widest text-white/30">
             {mode}
           </span>
+          {canShareMoment ? (
+            <button
+              type="button"
+              onClick={navigateToTrashTalkMoment}
+              className="flex items-center gap-1.5 rounded-lg border border-[#9a35ff]/40 bg-[#9a35ff]/12 px-2.5 py-1 font-tech text-[8px] uppercase tracking-wider text-[#d6acff] hover:bg-[#9a35ff]/22 transition"
+              title="Share as Kult Moment"
+            >
+              <Share2 className="h-3 w-3" />
+              Kult Moment
+            </button>
+          ) : null}
           {battleQ.isFetching && (
             <Loader2 className="h-3 w-3 animate-spin text-white/25" />
           )}
@@ -1988,6 +2032,7 @@ export default function ArenaGamePage() {
                   commentary={battleCommentary}
                   storageHashes={memoryRootHashes}
                   onHome={() => navigate(-1)}
+                  onShareMoment={shareMomentHandler}
                 />
               )}
 
@@ -2030,6 +2075,7 @@ export default function ArenaGamePage() {
           chatEndRef={chatEndRef}
           myAgent={myAgent}
           observerCount={observerCount}
+          onShareMoment={shareMomentHandler}
         />
       </div>
     </div>

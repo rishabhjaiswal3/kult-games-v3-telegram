@@ -11,6 +11,9 @@ interface ImportMetaEnv {
   readonly VITE_AI_ARENA_BEARER_TOKEN?: string;
   /** Embedded Moments app URL (full page iframe on /moments). */
   readonly VITE_MOMENTS_URL?: string;
+  readonly VITE_SHARE_BASE_URL?: string;
+  /** OG preview path — default `/api/share` when frontend proxies API. */
+  readonly VITE_SHARE_PREVIEW_PATH?: string;
 }
 
 interface ImportMeta {

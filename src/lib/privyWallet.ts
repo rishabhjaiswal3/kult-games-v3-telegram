@@ -56,3 +56,34 @@ export function pickSigningWallet(
 export function isEmbeddedPrivyConnectedWallet(wallet: ConnectedWallet | undefined) {
   return isEmbeddedPrivyWallet(wallet?.walletClientType);
 }
+
+/**
+ * Sign a SIWE message via Privy's wallet API.
+ * Embedded wallets must use `wallet.sign` — routing through `window.ethereum` / personal_sign
+ * often hangs or returns 4100 when browser wallet extensions are installed.
+ */
+export async function signMessageWithPrivyWallet(
+  wallet: ConnectedWallet,
+  message: string,
+  address: string,
+): Promise<string> {
+  if (typeof wallet.sign === "function") {
+    try {
+      return await wallet.sign(message);
+    } catch (err) {
+      if (isEmbeddedPrivyConnectedWallet(wallet)) throw err;
+    }
+  }
+
+  const provider = await wallet.getEthereumProvider();
+  try {
+    await provider.request({ method: "eth_requestAccounts" });
+  } catch {
+    /* best-effort */
+  }
+
+  return provider.request({
+    method: "personal_sign",
+    params: [message, address],
+  }) as Promise<string>;
+}

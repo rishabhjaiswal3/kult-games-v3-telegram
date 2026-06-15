@@ -6,7 +6,6 @@ import { gamesApi } from "@/api/gamesApi";
 import { HighwayHustleModeModal } from "@/components/highway/HighwayHustleModeModal";
 import { StorageKeys } from "@/constants/storageKeys";
 import {
-  getHighwayAggregateRouteId,
   getHighwayModeByModeId,
   isHighwayHustleFamily,
   type HighwayHustleModeConfig,
@@ -173,8 +172,6 @@ const GamePlay = () => {
       ? game.name
       : game.name?.en ?? Object.values(game.name ?? {})[0] ?? "Game";
 
-  const aggregateId = getHighwayAggregateRouteId(game);
-
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-black/55 to-transparent" />
@@ -197,15 +194,6 @@ const GamePlay = () => {
             <span className="absolute left-[7px] top-[7px] h-[10px] w-[2px] rounded-full bg-white/95 shadow-[0_0_8px_rgba(255,255,255,0.32)] transition-colors group-hover:bg-cyan-200" />
           </span>
         </button>
-        {isHighwayHustle && selectedMode ? (
-          <button
-            type="button"
-            onClick={() => navigate(`/game/${aggregateId}/play`, { replace: true })}
-            className="rounded-lg border border-white/15 bg-black/60 px-3 py-1.5 font-tech text-[9px] font-bold uppercase tracking-wider text-white/70 backdrop-blur hover:border-purple-500/40 hover:text-white"
-          >
-            Change mode
-          </button>
-        ) : null}
       </div>
       <div className="h-full w-full">
         <iframe

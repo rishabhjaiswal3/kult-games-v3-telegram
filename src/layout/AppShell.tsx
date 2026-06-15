@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { PageRouteFallback } from "@/components/PageRouteFallback";
 import { AppSidebar } from "@/layout/AppSidebar";
 import { AppTopbar } from "@/layout/AppTopbar";
 import { MobileBottomNav } from "@/layout/MobileBottomNav";
 import { DashboardTopbar } from "@/components/dashboard/DashboardTopbar";
+import { isMomentsPath } from "@/constants/moments";
 import { navLabelForPath } from "@/layout/navConfig";
 import { usesArenaLayout } from "@/layout/arenaRoutes";
 import { cn } from "@/lib/utils";
@@ -18,13 +20,14 @@ export function AppShell() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isGameChromeVisible, setIsGameChromeVisible] = useState(true);
   const activeLabel = navLabelForPath(pathname);
-  const isMoments = pathname === "/moments";
+  const isMoments = isMomentsPath(pathname);
   const isAIArenaLanding = pathname === "/ai-arena";
   const isArenaLayout = usesArenaLayout(pathname);
   const isHome = pathname === "/";
   const isLeaderboard = pathname === "/leaderboard";
   const isAutonomous = pathname === "/autonomous";
   const isAchievements = pathname === "/achievements";
+  const isLeague = pathname === "/league";
   const isGamePlay = /^\/game\/[^/]+\/play$/.test(pathname);
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export function AppShell() {
     }
   }, [isGamePlay]);
 
-  const showDashboardTopbar = isHome || isAIArenaLanding || isLeaderboard || isAutonomous || isAchievements || isMoments;
+  const showDashboardTopbar = isHome || isAIArenaLanding || isLeaderboard || isAutonomous || isAchievements || isMoments || isLeague;
   const hideAppTopbar = isArenaLayout || showDashboardTopbar;
   const isFullBleedRoute = isAIArenaLanding || isArenaLayout || showDashboardTopbar || isGamePlay;
   const showSidebar = !isGamePlay || isGameChromeVisible;
@@ -68,14 +71,18 @@ export function AppShell() {
             >
               {showDashboardTopbar ? <DashboardTopbar /> : null}
               {showTopbar ? <AppTopbar /> : null}
-              <Outlet context={shellOutletContext} />
+              <Suspense fallback={<PageRouteFallback />}>
+                <Outlet context={shellOutletContext} />
+              </Suspense>
             </div>
           ) : (
             <div className="arena-scroll mx-auto min-h-0 w-full max-w-full flex-1 flex-col overflow-y-auto overflow-x-hidden pb-24 sm:pb-0">
               {showDashboardTopbar ? <DashboardTopbar /> : null}
               {showTopbar ? <AppTopbar /> : null}
               <div className="px-4 py-5 sm:px-6 lg:px-8">
-                <Outlet context={shellOutletContext} />
+                <Suspense fallback={<PageRouteFallback />}>
+                  <Outlet context={shellOutletContext} />
+                </Suspense>
               </div>
             </div>
           )}

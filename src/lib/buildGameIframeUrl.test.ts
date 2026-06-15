@@ -34,4 +34,16 @@ describe("buildGameIframeUrl", () => {
     expect(url).toContain("jwt=jwt-abc");
     expect(url).toContain("source=browser");
   });
+
+  it("preserves hash routes while appending iframe auth params", () => {
+    const url = buildGameIframeUrl("https://guesstheai.xyz/#/auto-login", {
+      token: "tok123",
+    });
+    const parsed = new URL(url);
+
+    expect(parsed.origin).toBe("https://guesstheai.xyz");
+    expect(parsed.hash).toBe("#/auto-login");
+    expect(parsed.searchParams.get("jwt")).toBe("tok123");
+    expect(parsed.searchParams.get("source")).toBe("browser");
+  });
 });

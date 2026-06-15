@@ -7,8 +7,8 @@ import { TOKEN_KEY, WALLET_KEY } from "@/constants/storageKeys";
 import { clearAiAgentInfo } from "@/lib/aiAgentStorage";
 import {
   clearAiArenaAuthTokens,
-  exchangePrivyTokenForAiArenaToken,
   getAiArenaAccessToken,
+  tryExchangePrivyTokenForAiArenaToken,
 } from "@/lib/aiArenaAuth";
 import { buildSiweMessage, fetchSiweNonce } from "@/lib/siwe";
 import { requestOpenLoginModal } from "@/lib/loginModalBus";
@@ -24,6 +24,7 @@ import {
   isEmbeddedPrivyConnectedWallet,
   pickSigningWallet,
   resolvePrivyWalletAddress,
+  signMessageWithPrivyWallet,
 } from "@/lib/privyWallet";
 import type { Player } from "@/types/api";
 
@@ -43,7 +44,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Dedupes SIWE across React Strict Mode remounts (refs reset; a second `personal_sign` was still fired). */
 const siweInFlightByAddress = new Map<string, Promise<void>>();
-const SIGNING_WALLET_WAIT_MS = 8_000;
+const SIGNING_WALLET_WAIT_MS = 20_000;
 const SIGNING_WALLET_POLL_MS = 250;
 const TELEGRAM_WALLET_LOGIN_INTENT_KEY = "kult_telegram_wallet_login_intent";
 
@@ -53,6 +54,17 @@ function hasTelegramWalletLoginIntent() {
 
 function clearTelegramWalletLoginIntent() {
   sessionStorage.removeItem(TELEGRAM_WALLET_LOGIN_INTENT_KEY);
+}
+
+const PERSONAL_SIGN_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      window.setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
 }
 
 function isMissingSigningWalletError(error: unknown) {
@@ -84,6 +96,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [player, setPlayer] = useState<Player | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const attemptedTonWalletCreateRef = useRef(false);
+  const [hasKultSession, setHasKultSession] = useState(
+    () => typeof localStorage !== "undefined" && !!localStorage.getItem(TOKEN_KEY),
+  );
 
   const tonAddress = getTonWalletAddressFromPrivyUser(user);
   const resolvedAddress = resolvePrivyWalletAddress(user, wallets);
@@ -140,7 +155,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!ready || !authenticated || resolvedAddress || tonAddress) return;
     setIsLoading(true);
-    const timer = window.setTimeout(() => setIsLoading(false), 12_000);
+    const timer = window.setTimeout(() => {
+      setIsLoading(false);
+      if (!resolvePrivyWalletAddress(user, walletsRef.current)) {
+        requestOpenLoginModal({
+          mode: "recover",
+          message:
+            "Your wallet is still being set up. Please wait a moment and try again, or use Wallet login.",
+        });
+      }
+    }, 20_000);
     return () => window.clearTimeout(timer);
   }, [ready, authenticated, resolvedAddress, tonAddress]);
 
@@ -200,16 +224,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const existingWallet = localStorage.getItem(WALLET_KEY);
 
     if (existingToken && existingWallet?.toLowerCase() === address.toLowerCase()) {
+      setHasKultSession(true);
       void fetchProfile();
       if (!getAiArenaAccessToken()) {
         void (async () => {
-          try {
-            const privyAccessToken = await getAccessTokenRef.current();
-            if (privyAccessToken) {
-              await exchangePrivyTokenForAiArenaToken(privyAccessToken);
-            }
-          } catch {
-            /* non-blocking */
+          const privyAccessToken = await getAccessTokenRef.current();
+          if (privyAccessToken) {
+            await tryExchangePrivyTokenForAiArenaToken(privyAccessToken);
           }
         })();
       }
@@ -239,31 +260,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const embedded = isEmbeddedPrivyConnectedWallet(privyWallet);
 
       // Embedded wallets stay on Privy's default chain; forcing 0G breaks Google/email login.
+      // Chain switch is best-effort — personal_sign works on any chain.
       if (!embedded) {
-        if (typeof privyWallet.switchChain === "function") {
-          try {
+        try {
+          if (typeof privyWallet.switchChain === "function") {
             await privyWallet.switchChain(allowedChain.decimalChainId);
-          } catch {
-            /* fall through to provider switch */
+          } else {
+            const p = await privyWallet.getEthereumProvider();
+            await ensureWalletOnAllowedChain(p, allowedChain);
           }
+        } catch {
+          /* proceed to sign regardless — chain mismatch doesn't block SIWE */
         }
-        const provider = await privyWallet.getEthereumProvider();
-        await ensureWalletOnAllowedChain(provider, allowedChain);
       }
 
-      const provider = await privyWallet.getEthereumProvider();
-      const signature = (await provider.request({
-        method: "personal_sign",
-        params: [message, address],
-      })) as string;
+      const signature = await withTimeout(
+        signMessageWithPrivyWallet(privyWallet, message, address),
+        PERSONAL_SIGN_TIMEOUT_MS,
+        "Wallet signature",
+      );
 
       const res = await playerApi.login(address, message, signature);
+      setHasKultSession(true);
       setPlayer(res.player);
       clearTelegramWalletLoginIntent();
 
       const privyAccessToken = await getAccessTokenRef.current();
       if (privyAccessToken) {
-        await exchangePrivyTokenForAiArenaToken(privyAccessToken);
+        await tryExchangePrivyTokenForAiArenaToken(privyAccessToken);
       }
     })();
 
@@ -271,7 +295,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void run
       .catch(async (err) => {
+        // Kult SIWE succeeded — keep session even if a later optional step failed.
+        if (localStorage.getItem(TOKEN_KEY)) {
+          setHasKultSession(true);
+          console.warn("[SIWE] Post-login step failed (session kept):", err);
+          return;
+        }
+
         console.error("[SIWE] Login failed:", err);
+        setHasKultSession(false);
         playerApi.logout();
 
         if (isMissingSigningWalletError(err)) {
@@ -292,7 +324,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        toast.error("Could not finish sign-in. Please try wallet login or refresh the page.");
+        // For all other failures (timeout, rejection, backend error) reset the modal so the
+        // spinner doesn't stay stuck — authenticated stays true but isAuthenticated is false,
+        // so the modal has no other path to clear finishingSignIn.
+        const message =
+          err instanceof Error && err.message.includes("timed out")
+            ? "The wallet prompt timed out. Please try again and approve the signature request."
+            : "Could not finish sign-in. Please try again.";
+        requestOpenLoginModal({ mode: "recover", message });
+        toast.error(message);
       })
       .finally(() => {
         setIsLoading(false);
@@ -308,6 +348,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     playerApi.logout();
     clearAiArenaAuthTokens();
     clearAiAgentInfo();
+    setHasKultSession(false);
     setPlayer(null);
     await privyLogout();
   };

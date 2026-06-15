@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
+import { ArenaAgentThumbnail } from "@/components/arena/ArenaAgentThumbnail";
 import { ArenaBattleBoardCard } from "@/components/arena/ArenaBattleBoardCard";
 import { ArenaLiveMatchProvider, useArenaLiveMatch } from "@/contexts/ArenaLiveMatchContext";
 import { ArenaMatchStatusModal } from "@/components/arena/ArenaMatchStatusModal";
@@ -46,8 +48,45 @@ import iconBattle from "@/assets/icon-battle.png";
 import iconEarn from "@/assets/icon-earn.png";
 import iconOwn from "@/assets/Own.png";
 import sceneVideo from "@/assets/Scene 1.mp4";
-import type { AiArenaAgent } from "@/types/aiArenaGateway";
+import heroTrio from "@/assets/hero-trio.png";
+import warzoneVideo from "@/assets/IMG_9260.MOV";
+import battleStep3 from "@/assets/step3.mp4";
+import battleStep5 from "@/assets/step5.mp4";
+import type { AiArenaAgent, AiArenaAgentMemory, AiArenaBattle } from "@/types/aiArenaGateway";
 import { RANKS } from "@/utils/rankSystem";
+
+const arenaGames = [
+  {
+    title: "WARZONE WARRIORS",
+    tag: "2D SHOOTER",
+    body: "Fast-paced 2D arcade shooter. Team up, deploy, and dominate the battlefield.",
+    image: heroTrio,
+    video: warzoneVideo,
+    tone: "from-[#321004]/15 via-[#170d0a]/42 to-[#070910]/95",
+  },
+  {
+    title: "ROBOWARS",
+    tag: "VEHICLE ARENA",
+    body: "Build. Upgrade. Destroy. Fight in intense robotic vehicle battles.",
+    video: battleStep5,
+    tone: "from-[#25100d]/10 via-[#170b23]/45 to-[#070910]/95",
+  },
+  {
+    title: "HIGHWAY HUSTLE",
+    tag: "RACING",
+    body: "High-speed chases on neon-lit highways. Dodge, boost, and outrun your rivals.",
+    video: battleStep3,
+    tone: "from-[#29102e]/10 via-[#22091f]/42 to-[#070910]/95",
+  },
+];
+
+const arenaQuickLinks = [
+  { label: "My Agents", path: "/my-agents", icon: Box, color: "#00f080" },
+  { label: "Training", path: "/training", icon: BrainCircuit, color: "#0089ff" },
+  { label: "Battles", path: "/battles", icon: Swords, color: "#b338ff" },
+  { label: "Autonomous", path: "/autonomous", icon: Globe, color: "#ffc000" },
+];
+
 const agents = [
   {
     rank: "01",
@@ -168,12 +207,168 @@ function AIArenaPageContent() {
       <StatsBar />
       <FeaturesBlock />
       <HowItWorks />
+      <ArenaQuickLinks />
       <RankProgressionTimeline />
+      <ArenaGames />
       <TopAgents />
+      <MyBattleSection />
       <LiveBattles />
       <PartnersBlock />
       <ArenaLandingFooter />
     </div>
+  );
+}
+
+function ArenaQuickLinks() {
+  return (
+    <section className="mx-auto px-4 pt-8 sm:px-6 sm:pt-10">
+      <h2 className="mb-3 font-tech text-xs font-semibold uppercase tracking-wider text-white/86">Jump in</h2>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {arenaQuickLinks.map((link) => (
+          <Link
+            key={link.path}
+            to={link.path}
+            className="arena-panel group relative flex items-center justify-between overflow-hidden border-[var(--quick-link-border)] bg-[linear-gradient(110deg,var(--quick-link-bg),rgba(4,8,15,0.97)_48%)] p-4 shadow-[0_0_20px_var(--quick-link-shadow)] transition duration-300 hover:-translate-y-0.5 hover:border-[var(--quick-link-color)] hover:shadow-[0_0_34px_var(--quick-link-glow)]"
+            style={
+              {
+                "--quick-link-color": link.color,
+                "--quick-link-glow": `${link.color}33`,
+                "--quick-link-border": `${link.color}66`,
+                "--quick-link-bg": `${link.color}18`,
+                "--quick-link-shadow": `${link.color}14`,
+              } as CSSProperties
+            }
+          >
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_50%,var(--quick-link-glow),transparent_46%)] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="flex items-center gap-3">
+              <div
+                className="relative z-10 grid h-10 w-10 place-items-center rounded-md border border-[var(--quick-link-border)] bg-[var(--quick-link-bg)] shadow-[0_0_14px_var(--quick-link-shadow)] transition duration-300 group-hover:bg-[var(--quick-link-glow)] group-hover:shadow-[0_0_22px_var(--quick-link-glow)]"
+                style={{ color: link.color }}
+              >
+                <link.icon className="h-5 w-5" />
+              </div>
+              <span className="relative z-10 font-tech text-sm font-bold uppercase tracking-wide text-[var(--quick-link-color)] transition duration-300 group-hover:brightness-125">
+                {link.label}
+              </span>
+            </div>
+            <ArrowUpRight className="relative z-10 h-4 w-4 text-[var(--quick-link-color)] opacity-70 transition duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-100" />
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArenaGames() {
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [visibleCards, setVisibleCards] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches ? 2 : 1,
+  );
+  const maxIndex = Math.max(0, arenaGames.length - visibleCards);
+
+  const nextGame = () => {
+    setCarouselIndex((current) => (current >= maxIndex ? 0 : current + 1));
+  };
+
+  const previousGame = () => {
+    setCarouselIndex((current) => (current <= 0 ? maxIndex : current - 1));
+  };
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const updateVisibleCards = () => setVisibleCards(media.matches ? 2 : 1);
+
+    updateVisibleCards();
+    media.addEventListener("change", updateVisibleCards);
+    return () => media.removeEventListener("change", updateVisibleCards);
+  }, []);
+
+  useEffect(() => {
+    setCarouselIndex((current) => Math.min(current, maxIndex));
+  }, [maxIndex]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setCarouselIndex((current) => (current >= maxIndex ? 0 : current + 1));
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [maxIndex]);
+
+  return (
+    <section className="mx-auto px-4 py-12 sm:px-6 sm:py-16">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h2 className="font-display text-2xl sm:text-3xl">AI ARENA GAMES</h2>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={previousGame}
+            aria-label="Previous AI Arena game"
+            className="grid h-9 w-9 place-items-center rounded border border-[#9b32ff]/50 bg-[#230b35]/55 text-[#d773ff] transition hover:border-[#9b32ff]/80 hover:bg-[#230b35]/80 hover:text-white"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={nextGame}
+            aria-label="Next AI Arena game"
+            className="grid h-9 w-9 place-items-center rounded border border-[#9b32ff]/50 bg-[#230b35]/55 text-[#d773ff] transition hover:border-[#9b32ff]/80 hover:bg-[#230b35]/80 hover:text-white"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+          <Link
+            to="/battles"
+            className="hidden h-9 items-center gap-2 rounded border border-[#9b32ff]/50 bg-[#230b35]/55 px-3 font-tech text-[10px] uppercase tracking-[0.12em] text-[#d773ff] transition hover:border-[#9b32ff]/80 hover:bg-[#230b35]/80 hover:text-white sm:flex"
+          >
+            VIEW ALL <ArrowUpRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="overflow-hidden">
+        <div
+          className="flex transition-transform duration-700 ease-in-out"
+          style={{ transform: `translateX(-${carouselIndex * (100 / visibleCards)}%)` }}
+        >
+          {arenaGames.map((game) => (
+            <div key={game.title} className="w-full shrink-0 px-2 py-3 first:pl-0 last:pr-0 lg:w-1/2">
+              <article className="arena-panel group relative h-[330px] overflow-hidden rounded-xl border border-white/10 shadow-[0_18px_45px_rgba(0,0,0,0.35)] transition-all duration-500 hover:-translate-y-2 hover:scale-[1.01] hover:border-[#a83cff]/70 hover:shadow-[0_24px_70px_rgba(0,0,0,0.5),0_0_38px_rgba(154,53,255,0.28)] sm:h-[320px]">
+            {game.video ? (
+              <video
+                src={game.video}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="absolute inset-0 h-full w-full object-cover opacity-80 transition duration-700 group-hover:scale-110 group-hover:saturate-125"
+              />
+            ) : (
+              <img
+                src={game.image}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-80 transition duration-700 group-hover:scale-110 group-hover:saturate-125"
+              />
+            )}
+            <div className={`absolute inset-0 bg-gradient-to-b ${game.tone} opacity-75 transition-opacity duration-500 group-hover:opacity-55`} />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#070910]/95 via-[#070910]/15 to-transparent transition duration-500 group-hover:from-[#070910]/85" />
+            <div className="pointer-events-none absolute inset-0 rounded-xl ring-1 ring-inset ring-white/5 transition duration-500 group-hover:ring-[#c268ff]/45" />
+            <div className="pointer-events-none absolute -left-1/2 top-0 h-full w-1/3 skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/15 to-transparent opacity-0 transition-all duration-700 group-hover:left-[125%] group-hover:opacity-100" />
+            <div className="pointer-events-none absolute inset-x-10 bottom-0 h-px bg-gradient-to-r from-transparent via-[#b84cff] to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+
+            <div className="relative z-10 flex h-full flex-col justify-end p-5">
+              <h3 className="font-tech text-4xl font-black italic leading-[0.95] tracking-[-0.04em] text-white drop-shadow-lg transition duration-500 group-hover:-translate-y-1 group-hover:text-[#f0d7ff] group-hover:drop-shadow-[0_0_18px_rgba(184,76,255,0.65)] sm:text-5xl">
+                {game.title}
+              </h3>
+              <span className="mt-5 inline-flex w-fit rounded border border-[#9f2dff]/70 bg-[#5b1499]/35 px-3 py-2 font-tech text-[10px] text-[#d773ff] transition duration-500 group-hover:border-[#d187ff] group-hover:bg-[#721fc0]/55 group-hover:text-white group-hover:shadow-[0_0_18px_rgba(154,53,255,0.35)]">
+                {game.tag}
+              </span>
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-white/85 transition-colors duration-500 group-hover:text-white sm:text-base">{game.body}</p>
+            </div>
+              </article>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -427,6 +622,18 @@ function ArenaHeroMatchmakingAction({ compact = false }: { compact?: boolean }) 
         <span className="leading-tight text-center font-bold whitespace-nowrap">{buttonLabel}</span>
       </button>
 
+      <a
+        href="#my-battles"
+        className={`min-w-0 rounded-md font-tech border border-primary/40 bg-primary/10 hover:bg-primary/20 hover:border-primary/70 text-white flex items-center justify-center transition whitespace-nowrap ${
+          compact
+            ? "w-[240px] px-4 py-2.5 text-[10px] tracking-[0.06em] gap-2"
+            : "w-[240px] lg:w-auto px-4 py-2.5 text-[10px] tracking-[0.16em] gap-2"
+        }`}
+      >
+        <Eye className="w-3 h-3 shrink-0 text-primary" />
+        <span className="font-bold">MY BATTLE</span>
+      </a>
+
       {queuedAgent ? (
         <div
           className={`text-muted-foreground ${compact ? "max-w-[240px] text-center text-[11px]" : "max-w-md text-left text-xs"}`}
@@ -451,22 +658,6 @@ function ArenaHeroMatchmakingAction({ compact = false }: { compact?: boolean }) 
           {helperText}
         </p>
       )}
-
-      {trackedBattleId ? (
-        <Link
-          to={`/arena/game/${trackedBattleId}`}
-          className={`min-w-0 rounded-md font-tech border border-white/15 bg-white/5 hover:bg-white/10 text-white/85 flex items-center justify-center transition whitespace-nowrap ${
-            compact
-              ? "w-[240px] px-4 py-2.5 text-[10px] tracking-[0.06em] gap-2"
-              : "w-[240px] lg:w-auto px-4 py-2.5 text-[10px] tracking-[0.16em] gap-2"
-          }`}
-        >
-          <Eye className="w-3 h-3 shrink-0 text-accent" />
-          <span className="leading-tight text-center font-bold whitespace-nowrap">
-            OPEN LAST BATTLE {shortBattleId(trackedBattleId)}
-          </span>
-        </Link>
-      ) : null}
 
       <ArenaStartMatchmakingModal
         open={startModalOpen}
@@ -617,18 +808,21 @@ function FeaturesBlock() {
       title: "OWN YOUR AI",
       desc: "Each AI Agent is an NFT that you truly own.",
       c: "var(--neon)",
+      path: "/my-agents",
     },
     {
       icon: ArrowUp,
       title: "TRAIN & EVOLVE",
       desc: "Train, upgrade and evolve your agent to unlock their full potential.",
       c: "var(--neon-2)",
+      path: "/training",
     },
     {
       icon: Swords,
       title: "BATTLE & EARN",
       desc: "Compete in battles, climb the ranks and earn massive rewards.",
       c: "var(--amber)",
+      path: "/battles",
     },
     {
       icon: Globe,
@@ -659,11 +853,9 @@ function FeaturesBlock() {
           </Link>
         </div>
         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3">
-          {features.map((f) => (
-            <div
-              key={f.title}
-              className="card-glass rounded-xl p-4 sm:p-5 transition text-center md:text-left"
-            >
+          {features.map((f) => {
+            const content = (
+              <>
               <div
                 className="w-12 h-12 rounded-lg flex items-center justify-center mb-4 mx-auto md:mx-0"
                 style={{
@@ -681,8 +873,26 @@ function FeaturesBlock() {
                 {"partner" in f && f.partner === "0G" && <ZeroGLogo className="h-4 w-auto" />}
               </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
+              </>
+            );
+
+            return "path" in f && f.path ? (
+              <Link
+                key={f.title}
+                to={f.path}
+                className="card-glass group rounded-xl p-4 text-center transition hover:-translate-y-0.5 hover:border-white/20 hover:shadow-[0_0_28px_rgba(154,53,255,0.16)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9a35ff] sm:p-5 md:text-left"
+              >
+                {content}
+              </Link>
+            ) : (
+              <div
+                key={f.title}
+                className="card-glass rounded-xl p-4 text-center transition sm:p-5 md:text-left"
+              >
+                {content}
+              </div>
+            );
+          })}
         </div>
         <div className="card-glass rounded-xl p-4 sm:p-5 text-center lg:text-left">
           <div className="text-[10px] tracking-[0.3em] font-tech text-muted-foreground">
@@ -711,9 +921,12 @@ function FeaturesBlock() {
               />
             </svg>
           </div>
-          <button className="btn-primary w-full mt-4 px-5 py-2.5 rounded-md font-tech text-xs tracking-[0.2em] flex items-center justify-center gap-2">
+          <Link
+            to="/dashboard"
+            className="btn-primary mt-4 flex w-full items-center justify-center gap-2 rounded-md px-5 py-2.5 font-tech text-xs tracking-[0.2em]"
+          >
             VIEW TOKEN <ArrowUpRight className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       </div>
     </section>
@@ -1062,6 +1275,240 @@ function TopAgents() {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+function MyBattleSection() {
+  const myAgentsQ = useMyArenaAgents(1, 50);
+  const ownedAgents = myAgentsQ.data?.agents ?? [];
+  type OwnedBattleMemory = AiArenaAgentMemory & { ownerAgentId: string };
+  const memoriesQ = useQuery({
+    queryKey: ["aiArenaGateway", "arenaLandingBattleMemories", ownedAgents.map((agent) => agent.id).join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        ownedAgents.map((agent) =>
+          aiArenaGatewayApi.getAgentMemories(agent.id, 1, 100)
+        )
+      );
+      const uniqueMemories = new Map<string, OwnedBattleMemory>();
+      results.forEach((result, index) => {
+        const ownerAgentId = ownedAgents[index]?.id;
+        if (!ownerAgentId) return;
+        result.memories.forEach((memory) => {
+          const key = memory.metadata?.battleId ?? memory.id;
+          if (!uniqueMemories.has(key)) uniqueMemories.set(key, { ...memory, ownerAgentId });
+        });
+      });
+      return Array.from(uniqueMemories.values()).sort(
+        (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
+    },
+    enabled: ownedAgents.length > 0,
+    staleTime: 30_000,
+  });
+  const memories = memoriesQ.data ?? [];
+  const battleIds = useMemo(
+    () => memories.map((memory) => memory.metadata?.battleId).filter((id): id is string => Boolean(id)),
+    [memories]
+  );
+  const battleDetailsQ = useQuery({
+    queryKey: ["aiArenaGateway", "arenaLandingMemoryBattles", battleIds.join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        battleIds.map(async (battleId) => {
+          try {
+            const result = await aiArenaGatewayApi.getBattle(battleId);
+            return result.battle;
+          } catch {
+            return null;
+          }
+        })
+      );
+      return results.filter((battle): battle is AiArenaBattle => Boolean(battle));
+    },
+    enabled: battleIds.length > 0,
+    staleTime: 60_000,
+  });
+  const battlesById = useMemo(
+    () => new Map((battleDetailsQ.data ?? []).map((battle) => [battle.id, battle])),
+    [battleDetailsQ.data]
+  );
+  const participantIds = useMemo(
+    () => Array.from(new Set((battleDetailsQ.data ?? []).flatMap((battle) => battle.agentIds ?? []))),
+    [battleDetailsQ.data]
+  );
+  const participantAgentsQ = useQuery({
+    queryKey: ["aiArenaGateway", "arenaLandingMemoryParticipants", participantIds.join(",")],
+    queryFn: async () =>
+      Promise.all(
+        participantIds.map(async (agentId) => {
+          const ownedAgent = ownedAgents.find((agent) => agent.id === agentId);
+          if (ownedAgent) return ownedAgent;
+          try {
+            return await aiArenaGatewayApi.getAgentById(agentId);
+          } catch {
+            return { id: agentId, name: shortBattleId(agentId), archetype: "HYBRID" } as AiArenaAgent;
+          }
+        })
+      ),
+    enabled: participantIds.length > 0,
+    staleTime: 60_000,
+  });
+  const agentsById = useMemo(
+    () => new Map([...ownedAgents, ...(participantAgentsQ.data ?? [])].map((agent) => [agent.id, agent])),
+    [ownedAgents, participantAgentsQ.data]
+  );
+
+  const CARDS_PER_PAGE = 3;
+  const [battlePage, setBattlePage] = useState(0);
+  const totalBattlePages = Math.max(1, Math.ceil(memories.length / CARDS_PER_PAGE));
+  const canPrevBattle = battlePage > 0;
+  const canNextBattle = battlePage < totalBattlePages - 1;
+
+  return (
+    <section id="my-battles" className="mx-auto scroll-mt-24 px-4 py-12 sm:px-6 sm:py-16">
+      <div className="mb-6 flex flex-col gap-3 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+        <div>
+          <h3 className="font-display text-2xl sm:text-3xl">MY BATTLES</h3>
+          <p className="mt-2 text-sm text-muted-foreground">Your completed arena battle history.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          {memories.length > CARDS_PER_PAGE && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setBattlePage((p) => Math.max(0, p - 1))}
+                disabled={!canPrevBattle}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-white transition hover:border-primary/60 hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="min-w-[3ch] text-center font-tech text-[10px] text-muted-foreground">
+                {battlePage + 1}/{totalBattlePages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setBattlePage((p) => Math.min(totalBattlePages - 1, p + 1))}
+                disabled={!canNextBattle}
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-white transition hover:border-primary/60 hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          <Link to="/battles" className="text-sm text-accent hover:underline">
+            View All Battles
+          </Link>
+        </div>
+      </div>
+
+      {myAgentsQ.isLoading || memoriesQ.isLoading ? (
+        <div className="card-glass flex items-center gap-2 rounded-xl px-5 py-8 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading your battles...
+        </div>
+      ) : memoriesQ.isError || memories.length === 0 ? (
+        <div className="card-glass rounded-xl px-5 py-8 text-center text-sm text-muted-foreground">
+          No completed or cancelled battles are available yet. Start matchmaking to enter the arena.
+        </div>
+      ) : (
+        <div className="overflow-hidden">
+          <div
+            className="flex transition-transform duration-500 ease-in-out"
+            style={{ transform: `translateX(-${battlePage * 100}%)` }}
+          >
+            {Array.from({ length: totalBattlePages }, (_, pageIdx) => (
+              <div
+                key={pageIdx}
+                className="grid w-full flex-shrink-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {memories
+                  .slice(pageIdx * CARDS_PER_PAGE, pageIdx * CARDS_PER_PAGE + CARDS_PER_PAGE)
+                  .map((memory) => {
+                    const battleId = memory.metadata?.battleId;
+                    const battle = battleId ? battlesById.get(battleId) : undefined;
+                    const participants = (battle?.agentIds ?? [memory.ownerAgentId])
+                      .map((agentId) => agentsById.get(agentId))
+                      .filter((agent): agent is AiArenaAgent => Boolean(agent));
+                    const outcome = String(memory.metadata?.outcome ?? memory.type).toUpperCase();
+                    const isWin = outcome === "WIN";
+                    const isCancelled = outcome === "CANCELLED";
+
+                    return (
+                      <div
+                        key={memory.id}
+                        className="card-glass group relative overflow-hidden rounded-xl border border-primary/20 p-5 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition-all duration-500 hover:-translate-y-1.5 hover:border-primary/60 hover:shadow-[0_22px_55px_rgba(0,0,0,0.42),0_0_30px_rgba(154,53,255,0.2)]"
+                      >
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(154,53,255,0.16),transparent_42%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                        <div className="pointer-events-none absolute -left-1/2 top-0 h-full w-1/4 skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-all duration-700 group-hover:left-[125%] group-hover:opacity-100" />
+                        <div className="relative z-10">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`rounded-full border px-2.5 py-1 font-tech text-[9px] uppercase ${
+                            isCancelled
+                              ? "border-white/20 bg-white/5 text-white/55"
+                              : isWin
+                              ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-300"
+                              : "border-rose-400/35 bg-rose-500/10 text-rose-300"
+                          }`}>
+                            {isCancelled ? "Cancelled" : isWin ? "Win" : "Loss"}
+                          </span>
+                          <span className="font-tech text-[9px] uppercase text-accent">Battle Memory</span>
+                        </div>
+                        <div className="mt-4 flex items-center gap-3">
+                          {participants.map((agent, index) => (
+                            <div key={agent.id} className="flex items-center gap-3">
+                              {index > 0 ? <span className="font-display text-sm font-bold text-primary">VS</span> : null}
+                              <div className="text-center">
+                                <ArenaAgentThumbnail
+                                  agent={agent}
+                                  size="md"
+                                  className="h-20 w-20 rounded-xl border-2 border-primary/25 transition duration-500 group-hover:scale-105 group-hover:border-primary/65 group-hover:shadow-[0_0_20px_rgba(154,53,255,0.28)]"
+                                />
+                                <p className="mt-1 max-w-20 truncate font-tech text-[8px] text-white/55">{agent.name}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-4 font-mono text-[11px] italic leading-relaxed text-white/65">{memory.content}</p>
+                        <p className="mt-2 font-mono text-[10px] text-white/40">
+                          {new Date(memory.createdAt).toLocaleString()}
+                        </p>
+                        {battleId ? (
+                          <Link
+                            to={`/arena/game/${battleId}`}
+                            className="mt-4 inline-flex items-center gap-2 font-tech text-[9px] font-bold uppercase text-primary hover:text-white"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Open Battle {shortBattleId(battleId)}
+                          </Link>
+                        ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
+          </div>
+          {/* Dot indicators */}
+          {totalBattlePages > 1 && (
+            <div className="mt-5 flex items-center justify-center gap-2">
+              {Array.from({ length: totalBattlePages }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setBattlePage(i)}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === battlePage
+                      ? "w-6 bg-primary"
+                      : "w-1.5 bg-white/20 hover:bg-white/40"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

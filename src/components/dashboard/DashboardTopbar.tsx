@@ -1,18 +1,14 @@
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Bell, ChevronRight, Menu, Wallet, Copy, Check } from "lucide-react";
-import LoginModal from "@/components/LoginModal";
+import { useEffect, useState, useRef } from "react";
+import { Link } from "react-router-dom";
+import { Bell, Clapperboard, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeOpenLoginModal } from "@/lib/loginModalBus";
+import { requestOpenLoginModal } from "@/lib/loginModalBus";
 import dashboardAvatar from "@/assets/dashboard-avatar.png";
 
 export function DashboardTopbar() {
-  const [openPanel, setOpenPanel] = useState<"wallet" | "notifications" | null>(null);
-  const [loginOpen, setLoginOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"notifications" | null>(null);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const { isAuthenticated, walletAddress, logout } = useAuth();
-  const location = useLocation();
+  const { isAuthenticated, logout } = useAuth();
   const containerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -25,30 +21,8 @@ export function DashboardTopbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const shortWallet = useMemo(() => {
-    if (!isAuthenticated || !walletAddress) return "Wallet";
-    return walletAddress.length > 14
-      ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
-      : walletAddress;
-  }, [isAuthenticated, walletAddress]);
-
-  useEffect(() => {
-    if (location.search.includes("login=1") && !isAuthenticated) {
-      setLoginOpen(true);
-    }
-  }, [location.search, isAuthenticated]);
-
-  useEffect(() => subscribeOpenLoginModal(() => setLoginOpen(true)), []);
-
-  const togglePanel = (panel: "wallet" | "notifications") => {
+  const togglePanel = (panel: "notifications") => {
     setOpenPanel((current) => (current === panel ? null : panel));
-  };
-
-  const handleCopy = () => {
-    if (!walletAddress) return;
-    navigator.clipboard.writeText(walletAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleConnectWallet = () => {
@@ -58,30 +32,36 @@ export function DashboardTopbar() {
       return;
     }
     setOpenPanel(null);
-    setLoginOpen(true);
+    requestOpenLoginModal();
   };
 
   return (
     <>
       <header ref={containerRef} className="relative z-30 shrink-0 border-b border-white/10 bg-[#03070d]/88 backdrop-blur-xl">
         <div className="relative mx-auto flex min-h-[58px] max-w-full flex-nowrap items-center justify-between gap-1.5 px-3 py-2 sm:min-h-[68px] sm:gap-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3" />
-          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-3">
-            <div className="relative shrink-0 rounded-md bg-gradient-to-l from-[#8b29ff]/60 to-white/5 p-[1px] transition-all hover:from-[#8b29ff]">
-              <button
-                type="button"
-                onClick={() => togglePanel("wallet")}
-                className="flex h-[38px] w-full items-center gap-2 rounded-[5px] bg-[#03070d]/95 px-2 font-tech text-xs text-white/86 transition hover:bg-white/5 sm:px-3"
-              >
-                <Wallet className="h-4 w-4" />
-                <span className="hidden max-w-[8rem] truncate sm:inline">{shortWallet}</span>
-                <ChevronRight className="hidden h-3.5 w-3.5 rotate-90 sm:block" />
-              </button>
-            </div>
-            <Link to="/ai-arena" aria-label="Open AI Arena" className="hidden shrink-0 min-[430px]:block">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
+            <Link to="/dashboard" aria-label="Open dashboard" className="shrink-0 sm:hidden">
               <img
                 src={dashboardAvatar}
-                alt="Wallet avatar"
+                alt="Profile"
+                className="h-9 w-9 rounded-lg border border-[#8b27ff]/40 object-cover transition hover:border-[#b54cff]"
+              />
+            </Link>
+          </div>
+          <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-3">
+            {isAuthenticated && (
+              <a
+                href="/studio"
+                className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center gap-2 rounded-md bg-[#9a35ff] px-0 font-tech text-[11px] font-black uppercase tracking-wider text-white transition hover:brightness-110 min-[430px]:w-auto min-[430px]:px-4 sm:text-xs"
+              >
+                <Clapperboard className="h-4 w-4" />
+                <span className="hidden min-[430px]:inline">Studio</span>
+              </a>
+            )}
+            <Link to="/dashboard" aria-label="Open dashboard" className="hidden shrink-0 sm:block">
+              <img
+                src={dashboardAvatar}
+                alt="Profile"
                 className="h-9 w-9 rounded-lg border border-[#8b27ff]/40 object-cover transition hover:border-[#b54cff] sm:h-10 sm:w-10"
               />
             </Link>
@@ -122,47 +102,6 @@ export function DashboardTopbar() {
         </div>
         {openPanel && (
           <div className="absolute right-4 top-full z-50 w-[calc(100vw-2rem)] max-w-sm rounded-md border border-white/12 bg-[#060b15] p-4 shadow-2xl shadow-black/40 sm:right-6 lg:right-8">
-            {openPanel === "wallet" && (
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="font-tech text-xs uppercase text-white/55">Wallet</span>
-                  <span className={`font-tech text-[10px] ${isAuthenticated ? "text-[#00f080]" : "text-white/45"}`}>
-                    {isAuthenticated ? "CONNECTED" : "DISCONNECTED"}
-                  </span>
-                </div>
-                <div className="mt-3 rounded border border-white/10 bg-white/[0.02] p-3 font-tech text-xs">
-                  {isAuthenticated && walletAddress ? (
-                    <div className="flex items-center justify-between">
-                      <span>{shortWallet}</span>
-                      <button
-                        onClick={handleCopy}
-                        className="text-white/60 hover:text-white transition-colors"
-                        aria-label="Copy wallet address"
-                      >
-                        {copied ? <Check className="h-4 w-4 text-[#00f080]" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  ) : (
-                    "Connect a wallet to access your arena balance."
-                  )}
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Link
-                    to="/inventory"
-                    className="rounded-md border border-white/10 px-3 py-2 text-center font-tech text-[10px] text-white/76 hover:bg-white/5"
-                  >
-                    INVENTORY
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleConnectWallet}
-                    className="rounded-md border border-[#8b29ff]/60 bg-[#46136f]/70 px-3 py-2 font-tech text-[10px] hover:bg-[#5b1b90]"
-                  >
-                    {isAuthenticated ? "DISCONNECT" : "CONNECT"}
-                  </button>
-                </div>
-              </div>
-            )}
             {openPanel === "notifications" && (
               <div>
                 <div className="flex items-center justify-between">
@@ -191,7 +130,6 @@ export function DashboardTopbar() {
           </div>
         )}
       </header>
-      <LoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
     </>
   );
 }

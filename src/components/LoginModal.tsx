@@ -11,7 +11,10 @@ import {
 } from "@privy-io/react-auth";
 import { privyAuthErrorMessage } from "@/lib/privyAuthErrors";
 import { useAuth } from "@/contexts/AuthContext";
-import { consumePendingLoginModalRequest } from "@/lib/loginModalBus";
+import {
+  consumePendingLoginModalRequest,
+  subscribeOpenLoginModal,
+} from "@/lib/loginModalBus";
 import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
 
 interface LoginModalProps {
@@ -51,6 +54,20 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const [recoveryMode, setRecoveryMode] = useState(false);
   const walletFlowInFlightRef = useRef(false);
   const telegramWalletLoginIntentKey = "kult_telegram_wallet_login_intent";
+  const wasOpenRef = useRef(false);
+
+  const applyRecoverRequest = (message?: string) => {
+    walletFlowInFlightRef.current = false;
+    setOtpSent(false);
+    setOtpCode("");
+    setLoading(false);
+    setWalletFlowBusy(false);
+    setRecoveryMode(true);
+    setFinishingSignIn(false);
+    setAuthError(
+      message ?? "Sign-in could not finish. Please choose wallet, email, or Google to continue.",
+    );
+  };
 
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { authenticated, ready, linkWallet } = usePrivy();
@@ -99,6 +116,17 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   });
 
   useEffect(() => {
+    return subscribeOpenLoginModal((request) => {
+      if (request?.mode === "recover") {
+        applyRecoverRequest(request.message);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
     if (!isOpen) {
       setAuthError("");
       setRecoveryMode(false);
@@ -108,27 +136,28 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
 
     const pendingRequest = consumePendingLoginModalRequest();
     if (pendingRequest?.mode === "recover") {
-      walletFlowInFlightRef.current = false;
-      setOtpSent(false);
-      setOtpCode("");
-      setLoading(false);
-      setWalletFlowBusy(false);
-      setRecoveryMode(true);
-      setFinishingSignIn(false);
-      setAuthError(
-        pendingRequest.message ??
-          "Sign-in could not finish. Please choose wallet, email, or Google to continue."
-      );
+      applyRecoverRequest(pendingRequest.message);
       return;
     }
 
-    if (authenticated && !isAuthenticated && !authLoading && !recoveryMode) {
+    // Resume in-progress Kult SIWE only when the modal is freshly opened — not after a timeout/recover.
+    if (
+      justOpened &&
+      authenticated &&
+      !isAuthenticated &&
+      authLoading &&
+      !recoveryMode &&
+      !authError
+    ) {
       setFinishingSignIn(true);
     }
+
     if (finishingSignIn && isAuthenticated && !authLoading) {
       setFinishingSignIn(false);
       onClose();
+      return;
     }
+
     if (finishingSignIn && !authenticated && !isAuthenticated && !authLoading) {
       setFinishingSignIn(false);
     }
@@ -139,19 +168,25 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     authLoading,
     finishingSignIn,
     recoveryMode,
+    authError,
     onClose,
   ]);
 
   useEffect(() => {
-    if (!isOpen || !finishingSignIn || authLoading) return;
+    if (!isOpen || !finishingSignIn || recoveryMode) return;
     const timer = window.setTimeout(() => {
       if (!isAuthenticated) {
         setFinishingSignIn(false);
-        setAuthError("Sign-in started but could not complete. Please try again or use wallet login.");
+        setRecoveryMode(true);
+        setAuthError(
+          authLoading
+            ? "Still waiting for your wallet. Check for a signature popup in your browser or wallet extension."
+            : "Sign-in started but could not complete. Please try again or use Wallet login.",
+        );
       }
-    }, 25_000);
+    }, authLoading ? 50_000 : 12_000);
     return () => window.clearTimeout(timer);
-  }, [isOpen, finishingSignIn, authLoading, isAuthenticated]);
+  }, [isOpen, finishingSignIn, authLoading, isAuthenticated, recoveryMode]);
 
   const handleWalletAuth = () => {
     if (!ready || walletFlowBusy) return;
@@ -322,7 +357,9 @@ const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                       <div className="h-10 w-10 animate-spin rounded-full border-2 border-neon-cyan/30 border-t-neon-cyan" />
                       <p className="text-sm text-muted-foreground">Signing you in…</p>
                       <p className="text-xs text-muted-foreground/70">
-                        If a wallet prompt appears, approve it to verify with SIWE.
+                        {authLoading
+                          ? "Completing wallet verification with Kult…"
+                          : "If a wallet prompt appears, approve it to verify with SIWE."}
                       </p>
                     </motion.div>
                   ) : !otpSent ? (

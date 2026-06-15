@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, Menu, User } from "lucide-react";
-import { subscribeOpenLoginModal } from "@/lib/loginModalBus";
-import LoginModal from "@/components/LoginModal";
+import { Link } from "react-router-dom";
+import { Bell, Clapperboard, Menu, User } from "lucide-react";
+import { requestOpenLoginModal } from "@/lib/loginModalBus";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
@@ -14,25 +12,6 @@ import {
 
 export function AppTopbar() {
   const { isAuthenticated, walletAddress, player, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [loginOpen, setLoginOpen] = useState(false);
-
-  useEffect(() => {
-    if (location.search.includes("login=1") && !isAuthenticated) {
-      setLoginOpen(true);
-    }
-  }, [location.search, isAuthenticated]);
-
-  useEffect(() => subscribeOpenLoginModal(() => setLoginOpen(true)), []);
-
-  const handleLogin = useCallback(() => {
-    if (location.pathname === "/") {
-      setLoginOpen(true);
-      return;
-    }
-    navigate("/?login=1");
-  }, [location.pathname, navigate]);
 
   const displayName =
     player?.name?.trim() ||
@@ -52,6 +31,16 @@ export function AppTopbar() {
           </div>
 
           <div className="flex shrink-0 items-center justify-end gap-1.5 sm:flex-wrap sm:gap-3">
+            {isAuthenticated ? (
+              <a
+                href="/studio"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#9a35ff] px-3 font-tech text-[11px] font-black uppercase tracking-wider text-white transition hover:brightness-110 sm:px-4 sm:text-xs"
+              >
+                <Clapperboard className="h-4 w-4" />
+                Studio
+              </a>
+            ) : null}
+
             {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -75,7 +64,7 @@ export function AppTopbar() {
             ) : (
               <button
                 type="button"
-                onClick={handleLogin}
+                onClick={() => requestOpenLoginModal()}
                 className="btn-arena-primary rounded-md px-3 py-2.5 font-tech text-[10px] sm:px-4 sm:text-[11px]"
               >
                 CONNECT WALLET
@@ -102,8 +91,6 @@ export function AppTopbar() {
           </div>
         </div>
       </header>
-
-      <LoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
     </>
   );
 }

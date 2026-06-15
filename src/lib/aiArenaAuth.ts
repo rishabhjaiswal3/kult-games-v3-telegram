@@ -64,6 +64,16 @@ export async function exchangePrivyTokenForAiArenaToken(privyAccessToken: string
   return data;
 }
 
+/** Never throws — AI Arena auth is optional and must not break Kult login. */
+export async function tryExchangePrivyTokenForAiArenaToken(privyAccessToken: string) {
+  try {
+    return await exchangePrivyTokenForAiArenaToken(privyAccessToken);
+  } catch (err) {
+    console.warn("[AI Arena] Token exchange failed (non-blocking):", err);
+    return null;
+  }
+}
+
 export async function refreshAiArenaAccessToken() {
   const refreshToken = getAiArenaRefreshToken();
   if (!refreshToken) throw new Error("Missing AI Arena refresh token");

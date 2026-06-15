@@ -23,6 +23,8 @@ import { gamesApi } from "@/api/gamesApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { isGameDownloadable, gameDownloadUrl } from "@/lib/gameDownload";
 import { triggerBrowserDownload } from "@/lib/triggerBrowserDownload";
+import { HighwayHustleGarage } from "@/components/highway/HighwayHustleGarage";
+import { isHighwayHustleFamily } from "@/constants/highwayHustleModes";
 import { getGameDescription, getGameImage, getGameName } from "@/lib/gameDisplay";
 import type { Game } from "@/types/api";
 import type { LucideIcon } from "lucide-react";
@@ -144,6 +146,7 @@ const GameDetail = () => {
   const facts = buildFacts(game);
   const downloadable = isGameDownloadable(game);
   const downloadHref = gameDownloadUrl(game);
+  const isHighwayHustle = isHighwayHustleFamily(game);
 
   const handlePlayAccess = () => {
     if (isAuthenticated) {
@@ -330,6 +333,10 @@ const GameDetail = () => {
                 ))}
               </div>
             </div>
+          ) : null}
+
+          {isHighwayHustle ? (
+            <HighwayHustleGarage title="Garage — select your ride" />
           ) : null}
 
           {features.length > 0 ? (

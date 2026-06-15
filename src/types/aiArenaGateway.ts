@@ -456,12 +456,16 @@ export interface AiArenaBattleCommentaryRequest {
   loserHpPercent:  number;
   durationSeconds: number;
   endReason:       string;
+  /** When set, backend returns commentary from that fighter's perspective. */
+  perspective?:    'WINNER' | 'LOSER';
   playerStats?:    Record<string, AgentMatchStats>;
 }
 
 export interface AiArenaBattleCommentaryResponse {
-  commentary:  string;
-  teeVerified?: boolean | null;
+  commentary?:        string;
+  winnerCommentary?:  string;
+  loserCommentary?:   string;
+  teeVerified?:       boolean | null;
 }
 
 // ── Agent Memory (POST /v1/memory/:agentId/memory/episode) ───────────────────

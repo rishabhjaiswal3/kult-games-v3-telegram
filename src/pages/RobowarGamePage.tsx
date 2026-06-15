@@ -1,221 +1,312 @@
-/**
- * RobowarGamePage — simulation battle page for Robowar (no Unity build yet).
- *
- * Shows:
- *   1. Same VS header as ArenaGamePage, fully red-themed
- *   2. "Redirecting to local game build…" screen for 120 seconds (no timer shown)
- *   3. Random battle result overlay after 120s (red-themed)
- */
-
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Swords, Cpu, Trophy, Shield, Zap } from "lucide-react";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Swords,
+  Eye,
+  Heart,
+  Bookmark,
+  Play,
+  Pause,
+  Loader2,
+  Star,
+} from "lucide-react";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
+import { momentsApi } from "@/api/momentsApi";
 import { getArenaAgentPortrait } from "@/constants/arenaAgentArchetypes";
+import { MOMENTS_QUERY_KEY_ROOT } from "@/constants/moments";
+import type { Moment } from "@/types/api";
+import { cn } from "@/lib/utils";
 
-// ── red palette ──────────────────────────────────────────────────────────────
+// ── Red palette (VS header) ───────────────────────────────────────────────────
 const R = {
-  primary:   "#dc2626",   // red-600
-  bright:    "#ef4444",   // red-500
-  dim:       "#991b1b",   // red-800
-  glow:      "rgba(220,38,38,0.5)",
-  glowSoft:  "rgba(220,38,38,0.15)",
-  bg:        "#0a0202",
-  card:      "rgba(20,4,4,0.95)",
-  border:    "rgba(220,38,38,0.3)",
+  primary:  "#dc2626",
+  bright:   "#ef4444",
+  glow:     "rgba(220,38,38,0.5)",
+  glowSoft: "rgba(220,38,38,0.15)",
+  bg:       "#0a0202",
+  border:   "rgba(220,38,38,0.3)",
 };
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 18;
+
+// ── Category tabs ─────────────────────────────────────────────────────────────
+const CATEGORIES = ["For You", "Trending", "AI Arena", "Robowars"] as const;
+type Category = (typeof CATEGORIES)[number];
+
+const GAME_SLUG_MAP: Record<Category, string | undefined> = {
+  "For You":   undefined,
+  "Trending":  undefined,
+  "AI Arena":  "ai-arena",
+  "Robowars":  "robowars",
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const VIDEO_EXT = /\.(mp4|webm|mov|m4v|ogv)(?:\?.*)?$/i;
+
+function isMomentVideo(moment: Moment): boolean {
+  const ft = String(moment.assetMetadata?.fileType ?? "").toLowerCase();
+  if (ft.startsWith("video/")) return true;
+  if (ft.startsWith("image/")) return false;
+  const url = (moment.assetZgUrl ?? moment.assetUrl ?? "").split("?")[0].toLowerCase();
+  return VIDEO_EXT.test(url);
+}
+
+function getMomentAssetUrl(moment: Moment): string | undefined {
+  return moment.assetZgUrl ?? moment.assetUrl;
+}
+
+function pseudoDuration(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  const total = 12 + (h % 108);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function pseudoViews(id: string, likes: number): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 17 + id.charCodeAt(i)) >>> 0;
+  return likes * 6 + (h % 4000) + 1000;
+}
+
+function formatCompact(value: number): string {
+  return new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: value >= 10_000 ? 1 : 0,
+  }).format(value);
+}
+
+function shortenWallet(addr: string, start = 6, end = 4): string {
+  if (addr.length <= start + end + 3) return addr;
+  return `${addr.slice(0, start)}...${addr.slice(-end)}`;
+}
+
+function gameLabelFromSlug(slug: string): string {
+  const labels: Record<string, string> = {
+    "ai-arena":       "AI Arena",
+    "guess-the-ai":   "AI Arena",
+    "robowars":       "Robowars",
+    "kult-royale":    "Warzone Warriors",
+    "warzonewarriors":"Warzone Warriors",
+    "highway-hustle": "Racing League",
+    "highwayhustle":  "Racing League",
+  };
+  const key = slug.toLowerCase();
+  return labels[key] ?? slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function filterMoments(moments: Moment[], category: Category): Moment[] {
+  const slug = GAME_SLUG_MAP[category];
+  if (!slug) return moments;
+  const needles = slug === "ai-arena"
+    ? ["ai-arena", "aiarena", "guess-the-ai", "guesstheai"]
+    : ["robowars", "robo"];
+  return moments.filter((m) => {
+    const games = m.relatedGames.map((g) => g.toLowerCase());
+    const tags  = m.tags.map((t) => t.toLowerCase());
+    return needles.some(
+      (n) => games.some((g) => g.includes(n) || n.includes(g)) || tags.some((t) => t.includes(n)),
+    );
+  });
+}
+
+function feedHasMore(
+  lastPage: { total: number; totalPages: number; page: number; perPage: number; moments: unknown[] },
+  allPages: typeof lastPage[],
+) {
+  const loaded = allPages.reduce((t, p) => t + p.moments.length, 0);
+  if (lastPage.total > 0 && loaded >= lastPage.total) return false;
+  if (lastPage.totalPages > 0 && lastPage.page >= lastPage.totalPages) return false;
+  return lastPage.moments.length >= lastPage.perPage;
+}
+
 function shortId(v?: string | null) {
   if (!v) return "—";
   return v.length > 14 ? `${v.slice(0, 6)}…${v.slice(-4)}` : v;
 }
 
-function rand(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+// ── Moment card (matches kult-moment MomentArenaFeedCard design) ──────────────
+function MomentCard({ moment, onOpen }: { moment: Moment; onOpen: (id: string) => void }) {
+  const [playing, setPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-// ── Agent portrait card ───────────────────────────────────────────────────────
-function RoboAgentCard({
-  agent,
-  side,
-}: {
-  agent: { name: string; archetype?: string; eloRating?: number; wins?: number; losses?: number; clan?: string } | null;
-  side: "left" | "right";
-}) {
-  const portrait = agent ? getArenaAgentPortrait(agent as any) : null;
+  const url      = getMomentAssetUrl(moment);
+  const isVideo  = isMomentVideo(moment);
+  const views    = pseudoViews(moment.momentId, moment.numLikes);
+  const duration = pseudoDuration(moment.momentId);
+  const gameSlug = moment.relatedGames?.[0];
+  const gameLabel = gameSlug ? gameLabelFromSlug(gameSlug) : null;
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      void el.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    } else {
+      el.pause();
+      setPlaying(false);
+    }
+  };
 
   return (
-    <div className="flex flex-col items-center gap-3" style={{ width: 160 }}>
-      {/* portrait */}
-      <div
-        className="relative overflow-hidden rounded-2xl"
-        style={{
-          width: 160, height: 200,
-          border: `2px solid ${R.border}`,
-          boxShadow: `0 0 40px ${R.glow}, 0 0 80px ${R.glowSoft}`,
-        }}
-      >
-        {portrait ? (
-          <img
-            src={portrait}
-            alt={agent?.name ?? "agent"}
-            className={`h-full w-full object-cover object-top ${side === "right" ? "-scale-x-100" : ""}`}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center" style={{ background: R.glowSoft }}>
-            <Cpu className="h-12 w-12" style={{ color: R.primary }} />
-          </div>
-        )}
-        {/* name bar */}
-        <div
-          className="absolute inset-x-0 bottom-0 px-3 pb-3 pt-8"
-          style={{ background: `linear-gradient(to top, ${R.dim}ee 0%, transparent 100%)` }}
-        >
-          <div className="font-display text-sm font-black text-white truncate">{agent?.name ?? "???"}</div>
-          <div className="font-tech text-[9px] uppercase tracking-widest text-white/60 mt-0.5">
-            {agent?.archetype ?? "—"}
-          </div>
-        </div>
-      </div>
-      {/* stats strip */}
-      <div
-        className="w-full rounded-xl px-4 py-2 text-center"
-        style={{ background: R.card, border: `1px solid ${R.border}` }}
-      >
-        <div className="font-tech text-base font-bold" style={{ color: R.bright }}>
-          {agent?.eloRating?.toLocaleString() ?? "—"}
-          <span className="text-[9px] text-white/30 font-normal ml-1">ELO</span>
-        </div>
-        <div className="flex justify-center gap-3 mt-0.5">
-          <span className="font-mono text-[9px] text-white/35">{agent?.wins ?? 0}W</span>
-          <span className="text-white/15">·</span>
-          <span className="font-mono text-[9px] text-white/35">{agent?.losses ?? 0}L</span>
-        </div>
-        {agent?.clan && (
-          <div className="font-tech text-[8px] uppercase tracking-wider mt-1" style={{ color: R.primary }}>
-            {agent.clan}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Battle result overlay ─────────────────────────────────────────────────────
-function RoboResultOverlay({
-  winnerId,
-  winnerName,
-  winnerArchetype,
-  winnerElo,
-  winnerHp,
-  loserId,
-  loserName,
-  loserArchetype,
-  loserElo,
-  onHome,
-}: {
-  winnerId: string;
-  winnerName: string;
-  winnerArchetype: string;
-  winnerElo: number;
-  winnerHp: number;
-  loserId: string;
-  loserName: string;
-  loserArchetype: string;
-  loserElo: number;
-  onHome: () => void;
-}) {
-  return (
-    <div
-      className="absolute inset-0 z-50 flex flex-col overflow-y-auto"
-      style={{ background: R.bg }}
+    <article
+      onClick={() => onOpen(moment.momentId)}
+      className="group cursor-pointer overflow-hidden rounded-xl bg-[#14141A] transition-all hover:shadow-[0_0_28px_rgba(99,54,255,0.18)]"
     >
-      {/* Red glow top */}
-      <div className="absolute inset-x-0 top-0 h-64 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 0%, ${R.glow} 0%, transparent 70%)` }} />
-
-      <div className="relative z-10 flex flex-col items-center gap-6 px-4 py-10 min-h-full">
-
-        {/* Result badge */}
-        <div className="flex flex-col items-center gap-2">
-          <div
-            className="font-display text-6xl font-black tracking-widest"
-            style={{ color: R.bright, textShadow: `0 0 60px ${R.glow}, 0 0 120px ${R.glowSoft}` }}
-          >
-            BATTLE END
+      {/* Thumbnail / video */}
+      <div className="relative aspect-video overflow-hidden bg-[#0B0B0E]">
+        {url ? (
+          isVideo ? (
+            <>
+              <video
+                ref={videoRef}
+                src={url}
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                muted
+                playsInline
+                loop
+                preload="metadata"
+                onClick={togglePlay}
+                onPlay={() => setPlaying(true)}
+                onPause={() => setPlaying(false)}
+              />
+              <button
+                type="button"
+                onClick={togglePlay}
+                className={cn(
+                  "absolute inset-0 z-10 flex items-center justify-center transition-opacity",
+                  playing ? "opacity-0 hover:opacity-100" : "opacity-100",
+                )}
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm ring-2 ring-white/30 transition-transform duration-200 group-hover:scale-110">
+                  {playing
+                    ? <Pause className="h-4 w-4 fill-white text-white" />
+                    : <Play  className="h-4 w-4 fill-white text-white" />
+                  }
+                </span>
+              </button>
+            </>
+          ) : (
+            <img
+              src={url}
+              alt={moment.title}
+              loading="lazy"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          )
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-900/20 via-black/60 to-black/90">
+            <Play className="h-8 w-8 text-white/20" />
           </div>
-          <div
-            className="font-tech text-[10px] uppercase tracking-[0.4em] px-4 py-1 rounded-full"
-            style={{ color: R.bright, background: R.glowSoft, border: `1px solid ${R.border}` }}
-          >
-            Robowar · Simulation Complete
+        )}
+
+        {/* Gradient overlay */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+
+        {/* Game badge — top left */}
+        {gameLabel && (
+          <div className="absolute left-2 top-2 z-10">
+            <span className="inline-flex items-center rounded-md bg-[#6336FF] px-2 py-0.5 font-tech text-[9px] font-black tracking-wider text-white">
+              {gameLabel.toUpperCase()}
+            </span>
           </div>
+        )}
+
+        {/* Duration — top right */}
+        <div className="absolute right-2 top-2 z-10">
+          <span className="rounded bg-black/60 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-white backdrop-blur-sm">
+            {duration}
+          </span>
         </div>
 
-        {/* Winner / Loser cards */}
-        <div className="flex flex-col gap-3 w-full max-w-sm">
-          {/* Winner */}
-          <div
-            className="rounded-2xl p-4"
-            style={{ background: `linear-gradient(135deg, ${R.glowSoft}, rgba(0,0,0,0.6))`, border: `1px solid ${R.primary}` }}
-          >
-            <div className="flex items-center gap-1.5 mb-3">
-              <Trophy className="h-3.5 w-3.5" style={{ color: R.bright }} />
-              <span className="font-tech text-[9px] uppercase tracking-widest" style={{ color: R.bright }}>Winner</span>
-            </div>
-            <div className="font-display text-lg font-black text-white">{winnerName}</div>
-            <div className="font-tech text-[9px] text-white/50 uppercase tracking-wider mt-0.5">{winnerArchetype}</div>
-            <div className="mt-3 space-y-1.5">
-              <div className="flex justify-between font-mono text-[9px]">
-                <span className="text-white/40">HP remaining</span>
-                <span style={{ color: R.bright }}>{winnerHp}%</span>
-              </div>
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-                <div className="h-full rounded-full" style={{ width: `${winnerHp}%`, background: `linear-gradient(to right, ${R.dim}, ${R.bright})` }} />
-              </div>
-              <div className="font-mono text-[9px] text-white/25 text-right">{winnerElo.toLocaleString()} ELO</div>
+        {/* Play overlay for non-video (image) — center */}
+        {!isVideo && url && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm ring-2 ring-white/30 transition-transform duration-200 group-hover:scale-110">
+              <Play className="h-4 w-4 fill-white text-white" />
             </div>
           </div>
+        )}
+      </div>
 
-          {/* Loser */}
-          <div
-            className="rounded-2xl p-4"
-            style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)" }}
-          >
-            <div className="flex items-center gap-1.5 mb-3">
-              <Shield className="h-3 w-3 text-white/20" />
-              <span className="font-tech text-[9px] uppercase tracking-widest text-white/40">Loser</span>
-            </div>
-            <div className="font-display text-sm font-bold text-white/40">{loserName}</div>
-            <div className="font-tech text-[9px] text-white/25 uppercase tracking-wider mt-0.5">{loserArchetype}</div>
-            <div className="mt-3">
-              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
-                <div className="h-full w-0 rounded-full bg-white/15" />
-              </div>
-              <div className="font-mono text-[9px] text-white/20 text-right mt-1">{loserElo.toLocaleString()} ELO</div>
-            </div>
+      {/* Info */}
+      <div className="space-y-1.5 px-3 py-2.5">
+        <h3 className="line-clamp-1 text-sm font-bold leading-snug text-white">
+          {moment.title || "Untitled Moment"}
+        </h3>
+
+        {/* Creator + clan */}
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <div className="flex min-w-0 items-center gap-1">
+            <span className="text-[#8B8B9A]">by</span>
+            <span className="truncate font-semibold text-white">
+              {shortenWallet(moment.playerWalletAddress)}
+            </span>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#6336FF]" />
           </div>
+          {gameLabel && (
+            <span className="shrink-0 truncate text-[10px] text-[#5C5C6B]">{gameLabel}</span>
+          )}
         </div>
 
-        {/* Note */}
-        <p className="font-mono text-[10px] text-white/30 text-center max-w-xs leading-relaxed">
-          Result generated by Robowar simulation engine.
-          Full on-chain integration coming soon.
-        </p>
-
-        {/* Actions */}
-        <div className="flex gap-3">
+        {/* Stats */}
+        <div className="flex items-center gap-3 pt-0.5 text-[11px] text-[#8B8B9A]">
+          <span className="flex items-center gap-1">
+            <Eye className="h-3.5 w-3.5" />
+            {formatCompact(views)}
+          </span>
+          <span className="flex items-center gap-1">
+            <Heart className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
+            {formatCompact(moment.numLikes)}
+          </span>
           <button
             type="button"
-            onClick={onHome}
-            className="rounded-xl px-6 py-3 font-tech text-xs uppercase tracking-widest text-white transition hover:opacity-80"
-            style={{ background: R.primary, boxShadow: `0 0 24px ${R.glow}` }}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto rounded p-0.5 transition-colors hover:text-white"
+            aria-label="Bookmark"
           >
-            Back to Arena
+            <Bookmark className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
+    </article>
+  );
+}
+
+// ── Category filter strip ─────────────────────────────────────────────────────
+function CategoryStrip({
+  active,
+  onChange,
+}: {
+  active: Category;
+  onChange: (c: Category) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 overflow-x-auto border-b border-white/[0.06] bg-[#0E0E16] px-3 py-3 [scrollbar-width:none]">
+      {CATEGORIES.map((c) => {
+        const on = active === c;
+        return (
+          <button
+            key={c}
+            type="button"
+            onClick={() => onChange(c)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-1.5 font-tech text-[11px] font-bold tracking-wide transition-colors",
+              on
+                ? "border-[#6336FF]/50 bg-[#6336FF] text-white shadow-[0_0_18px_rgba(99,54,255,0.4)]"
+                : "border-white/[0.1] bg-black/40 text-[#8B8B9A] hover:border-[#6336FF]/30 hover:text-white",
+            )}
+          >
+            {c === "For You" && on && <Star className="h-3 w-3 fill-current" aria-hidden />}
+            {c.toUpperCase()}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -226,9 +317,11 @@ export default function RobowarGamePage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const myAgentId      = searchParams.get("myAgentId");
+  const myAgentId       = searchParams.get("myAgentId");
   const opponentIdParam = searchParams.get("opponentId");
-  const mode           = searchParams.get("mode") ?? "RANKED";
+  const mode            = searchParams.get("mode") ?? "RANKED";
+
+  const [activeCategory, setActiveCategory] = useState<Category>("For You");
 
   // Agent queries
   const myAgentQ = useQuery({
@@ -238,7 +331,6 @@ export default function RobowarGamePage() {
     staleTime: 60_000,
     retry: 1,
   });
-
   const opponentQ = useQuery({
     queryKey: ["robowar", "opponent", opponentIdParam],
     queryFn:  () => aiArenaGatewayApi.getAgentById(opponentIdParam!),
@@ -250,71 +342,59 @@ export default function RobowarGamePage() {
   const myAgent  = myAgentQ.data  ?? null;
   const opponent = opponentQ.data ?? null;
 
-  // Simulation state
-  const [phase, setPhase] = useState<"redirect" | "running" | "result">("redirect");
-  const [progress, setProgress] = useState(0); // 0-100 over 120s
-  const [result, setResult] = useState<{
-    winnerId: string; winnerName: string; winnerArchetype: string; winnerElo: number; winnerHp: number;
-    loserId: string;  loserName: string;  loserArchetype: string;  loserElo: number;
-  } | null>(null);
+  // Moments feed
+  const feedQuery = useInfiniteQuery({
+    queryKey: [MOMENTS_QUERY_KEY_ROOT, "robowar-feed"],
+    queryFn: ({ pageParam }) => momentsApi.list({ page: pageParam, perPage: PAGE_SIZE }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages, lastPageParam) =>
+      feedHasMore(lastPage, allPages) ? lastPageParam + 1 : undefined,
+    staleTime: 60_000,
+    retry: 1,
+  });
 
-  const startTimeRef = useRef<number | null>(null);
-  const rafRef       = useRef<number | null>(null);
-  const SIM_DURATION = 120_000; // 120 seconds
+  const allMoments = useMemo(
+    () => feedQuery.data?.pages.flatMap((p) => p.moments) ?? [],
+    [feedQuery.data],
+  );
 
-  const generateResult = useCallback(() => {
-    const myWins = Math.random() > 0.5;
-    const winner = myWins ? myAgent : opponent;
-    const loser  = myWins ? opponent : myAgent;
-    setResult({
-      winnerId:        winner?.id        ?? "agent-a",
-      winnerName:      winner?.name      ?? "Robo-A",
-      winnerArchetype: winner?.archetype ?? "—",
-      winnerElo:       winner?.eloRating ?? 1000,
-      winnerHp:        rand(12, 72),
-      loserId:         loser?.id         ?? "agent-b",
-      loserName:       loser?.name       ?? "Robo-B",
-      loserArchetype:  loser?.archetype  ?? "—",
-      loserElo:        loser?.eloRating  ?? 1000,
-    });
-    setPhase("result");
-  }, [myAgent, opponent]);
+  const displayMoments = useMemo(
+    () => filterMoments(allMoments, activeCategory),
+    [allMoments, activeCategory],
+  );
 
-  // Redirect message for 3s, then start the 120s simulation
-  useEffect(() => {
-    const t = setTimeout(() => setPhase("running"), 3_000);
-    return () => clearTimeout(t);
-  }, []);
+  // Infinite scroll
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const sentinelRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+      if (!node || !feedQuery.hasNextPage) return;
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) void feedQuery.fetchNextPage();
+        },
+        { rootMargin: "240px" },
+      );
+      io.observe(node);
+      observerRef.current = io;
+    },
+    [feedQuery.hasNextPage, feedQuery.fetchNextPage],
+  );
 
-  // Progress animation over 120s
-  useEffect(() => {
-    if (phase !== "running") return;
-
-    startTimeRef.current = performance.now();
-
-    const tick = (now: number) => {
-      const elapsed = now - (startTimeRef.current ?? now);
-      const pct = Math.min((elapsed / SIM_DURATION) * 100, 100);
-      setProgress(pct);
-      if (elapsed >= SIM_DURATION) {
-        generateResult();
-        return;
-      }
-      rafRef.current = requestAnimationFrame(tick);
-    };
-
-    rafRef.current = requestAnimationFrame(tick);
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
-  }, [phase, generateResult]);
+  const openMoment = useCallback(
+    (id: string) => navigate(`/moments/${id}`),
+    [navigate],
+  );
 
   return (
     <div
       className="flex h-dvh min-h-0 flex-col overflow-hidden"
       style={{ background: R.bg, color: "#fff" }}
     >
-      {/* ── Top nav ──────────────────────────────────────────────────────── */}
+      {/* ── Top nav ──────────────────────────────────────────────────── */}
       <div
-        className="flex shrink-0 items-center justify-between gap-3 px-3 sm:px-5 py-2 z-30 relative"
+        className="flex shrink-0 items-center justify-between gap-3 px-3 sm:px-5 py-2 z-30"
         style={{ background: "rgba(10,2,2,0.97)", borderBottom: `1px solid ${R.border}` }}
       >
         <button
@@ -339,35 +419,28 @@ export default function RobowarGamePage() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-2 w-2 rounded-full animate-pulse"
-            style={{ background: R.bright }}
-          />
+          <span className="inline-block h-2 w-2 rounded-full animate-pulse" style={{ background: R.bright }} />
           <span className="font-tech text-[9px] uppercase tracking-widest" style={{ color: R.bright }}>
             Robowar
           </span>
         </div>
       </div>
 
-      {/* ── Agent header strip ────────────────────────────────────────────── */}
+      {/* ── Agent VS strip ───────────────────────────────────────────── */}
       <div
         className="flex shrink-0 items-center justify-between gap-4 px-4 sm:px-8 py-3"
         style={{ background: "rgba(10,2,2,0.9)", borderBottom: `1px solid ${R.border}` }}
       >
         {/* Left agent */}
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="h-10 w-10 rounded-xl overflow-hidden shrink-0"
-            style={{ border: `1px solid ${R.border}` }}
-          >
-            {myAgent ? (
-              <img src={getArenaAgentPortrait(myAgent as any)} alt="" className="h-full w-full object-cover object-top" />
-            ) : (
-              <div className="h-full w-full" style={{ background: R.glowSoft }} />
-            )}
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl" style={{ border: `1px solid ${R.border}` }}>
+            {myAgent
+              ? <img src={getArenaAgentPortrait(myAgent as any)} alt="" className="h-full w-full object-cover object-top" />
+              : <div className="h-full w-full" style={{ background: R.glowSoft }} />
+            }
           </div>
           <div className="min-w-0">
-            <div className="font-display text-sm font-bold text-white truncate">{myAgent?.name ?? "—"}</div>
+            <div className="truncate font-display text-sm font-bold text-white">{myAgent?.name ?? "—"}</div>
             <div className="font-tech text-[9px] uppercase tracking-wider" style={{ color: R.bright }}>
               {myAgent?.archetype ?? "—"}
             </div>
@@ -376,7 +449,7 @@ export default function RobowarGamePage() {
         </div>
 
         {/* VS */}
-        <div className="flex flex-col items-center gap-1 shrink-0">
+        <div className="flex shrink-0 flex-col items-center gap-1">
           <div
             className="flex h-10 w-10 items-center justify-center rounded-full"
             style={{ border: `1px solid ${R.primary}`, background: R.glowSoft, boxShadow: `0 0 20px ${R.glow}` }}
@@ -388,19 +461,15 @@ export default function RobowarGamePage() {
         </div>
 
         {/* Right agent */}
-        <div className="flex items-center gap-3 min-w-0 flex-row-reverse">
-          <div
-            className="h-10 w-10 rounded-xl overflow-hidden shrink-0"
-            style={{ border: `1px solid ${R.border}` }}
-          >
-            {opponent ? (
-              <img src={getArenaAgentPortrait(opponent as any)} alt="" className="h-full w-full object-cover object-top -scale-x-100" />
-            ) : (
-              <div className="h-full w-full" style={{ background: R.glowSoft }} />
-            )}
+        <div className="flex flex-row-reverse items-center gap-3 min-w-0">
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl" style={{ border: `1px solid ${R.border}` }}>
+            {opponent
+              ? <img src={getArenaAgentPortrait(opponent as any)} alt="" className="h-full w-full object-cover object-top -scale-x-100" />
+              : <div className="h-full w-full" style={{ background: R.glowSoft }} />
+            }
           </div>
           <div className="min-w-0 text-right">
-            <div className="font-display text-sm font-bold text-white truncate">{opponent?.name ?? "—"}</div>
+            <div className="truncate font-display text-sm font-bold text-white">{opponent?.name ?? "—"}</div>
             <div className="font-tech text-[9px] uppercase tracking-wider" style={{ color: R.bright }}>
               {opponent?.archetype ?? "—"}
             </div>
@@ -409,121 +478,69 @@ export default function RobowarGamePage() {
         </div>
       </div>
 
-      {/* ── Main canvas area ──────────────────────────────────────────────── */}
-      <div className="relative flex flex-1 min-h-0 items-center justify-center overflow-hidden">
+      {/* ── Category filter ──────────────────────────────────────────── */}
+      <CategoryStrip active={activeCategory} onChange={setActiveCategory} />
 
-        {/* Red ambient glow background */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute inset-x-0 top-0 h-72" style={{ background: `radial-gradient(ellipse at 50% 0%, ${R.glowSoft} 0%, transparent 70%)` }} />
-          <div className="absolute inset-x-0 bottom-0 h-48" style={{ background: `radial-gradient(ellipse at 50% 100%, rgba(220,38,38,0.08) 0%, transparent 70%)` }} />
-        </div>
-
-        {/* Redirect phase */}
-        {phase === "redirect" && (
-          <div className="flex flex-col items-center gap-6 px-6 text-center z-10">
-            <div
-              className="flex h-20 w-20 items-center justify-center rounded-full"
-              style={{ background: R.glowSoft, border: `2px solid ${R.primary}`, boxShadow: `0 0 60px ${R.glow}` }}
+      {/* ── Moments feed ─────────────────────────────────────────────── */}
+      <div className="flex-1 min-h-0 overflow-y-auto bg-[hsl(268_35%_7%/0.5)]">
+        {feedQuery.isLoading ? (
+          <div className="grid gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex animate-pulse flex-col overflow-hidden rounded-xl bg-[#14141A]">
+                <div className="aspect-video bg-white/5" />
+                <div className="space-y-2 px-3 py-2.5">
+                  <div className="h-4 w-2/3 rounded bg-white/5" />
+                  <div className="h-3 w-1/2 rounded bg-white/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : feedQuery.isError ? (
+          <div className="flex flex-col items-center gap-3 py-20">
+            <p className="text-sm font-semibold text-white/40">Could not load moments</p>
+            <button
+              type="button"
+              onClick={() => void feedQuery.refetch()}
+              className="rounded-xl border border-[#6336FF]/40 bg-[#6336FF]/10 px-5 py-2 font-tech text-[10px] uppercase tracking-widest text-[#a07aff]"
             >
-              <Cpu className="h-10 w-10 animate-pulse" style={{ color: R.bright }} />
-            </div>
-            <div>
-              <div className="font-display text-2xl font-black text-white mb-2">
-                You will be redirecting to your local game build.
-              </div>
-              <div className="font-tech text-xs text-white/40 uppercase tracking-widest">
-                Robowar · Launching...
-              </div>
-            </div>
-            <div className="flex gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="inline-block h-2 w-2 rounded-full animate-bounce"
-                  style={{ background: R.bright, animationDelay: `${i * 0.15}s` }}
-                />
+              Retry
+            </button>
+          </div>
+        ) : displayMoments.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-20">
+            <p className="text-sm font-semibold text-white/40">No moments in this category yet</p>
+            <button
+              type="button"
+              onClick={() => setActiveCategory("For You")}
+              className="rounded-xl border border-white/10 bg-black/40 px-5 py-2 font-tech text-[10px] uppercase tracking-widest text-white/60 hover:text-white"
+            >
+              Show all
+            </button>
+          </div>
+        ) : (
+          <div className="px-4 py-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {displayMoments.map((moment) => (
+                <MomentCard key={moment.momentId} moment={moment} onOpen={openMoment} />
               ))}
             </div>
-          </div>
-        )}
 
-        {/* Running phase — 120s simulation, no seconds shown */}
-        {phase === "running" && (
-          <div className="flex flex-col items-center gap-8 px-6 w-full max-w-md z-10">
-
-            {/* Agent portraits */}
-            <div className="flex items-center gap-6 sm:gap-12">
-              <RoboAgentCard agent={myAgent} side="left" />
-
-              <div className="flex flex-col items-center gap-2 shrink-0">
-                <div
-                  className="flex h-14 w-14 items-center justify-center rounded-full font-display text-2xl font-black"
-                  style={{
-                    border: `2px solid ${R.primary}`,
-                    color: R.bright,
-                    background: R.glowSoft,
-                    boxShadow: `0 0 40px ${R.glow}`,
-                    textShadow: `0 0 20px ${R.glow}`,
-                  }}
-                >
-                  VS
+            {/* Infinite scroll sentinel + footer */}
+            <div className="flex flex-col items-center gap-3 pt-6">
+              <div ref={feedQuery.hasNextPage ? sentinelRef : null} aria-hidden className="h-px w-full" />
+              {feedQuery.isFetchingNextPage ? (
+                <div className="flex items-center gap-2 font-tech text-[10px] uppercase tracking-wider text-[#a07aff]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Loading more moments</span>
                 </div>
-                <Zap className="h-4 w-4 animate-pulse" style={{ color: R.bright }} />
-              </div>
-
-              <RoboAgentCard agent={opponent} side="right" />
-            </div>
-
-            {/* Status */}
-            <div className="flex flex-col items-center gap-1 text-center">
-              <div className="font-display text-xl font-black text-white">Battle Ongoing</div>
-              <div className="font-tech text-xs text-white/40 uppercase tracking-widest">
-                Robowar simulation in progress
-              </div>
-            </div>
-
-            {/* Progress bar — no numbers, just fills */}
-            <div className="w-full space-y-2">
-              <div
-                className="h-3 w-full rounded-full overflow-hidden"
-                style={{ background: "rgba(220,38,38,0.12)", border: `1px solid ${R.border}` }}
-              >
-                <div
-                  className="h-full rounded-full transition-none"
-                  style={{
-                    width: `${progress}%`,
-                    background: `linear-gradient(to right, ${R.dim}, ${R.bright})`,
-                    boxShadow: `0 0 12px ${R.glow}`,
-                  }}
-                />
-              </div>
-              <div className="flex items-center justify-center gap-2">
-                <span className="inline-block h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: R.bright }} />
-                <span className="font-tech text-[9px] uppercase tracking-[0.3em] text-white/40">
-                  Syncing battle state…
+              ) : !feedQuery.hasNextPage && displayMoments.length > 0 ? (
+                <span className="font-tech text-[10px] uppercase tracking-wider text-white/30">
+                  No more moments
                 </span>
-              </div>
+              ) : null}
             </div>
-
           </div>
         )}
-
-        {/* Result overlay */}
-        {phase === "result" && result && (
-          <RoboResultOverlay
-            winnerId={result.winnerId}
-            winnerName={result.winnerName}
-            winnerArchetype={result.winnerArchetype}
-            winnerElo={result.winnerElo}
-            winnerHp={result.winnerHp}
-            loserId={result.loserId}
-            loserName={result.loserName}
-            loserArchetype={result.loserArchetype}
-            loserElo={result.loserElo}
-            onHome={() => navigate("/ai-arena")}
-          />
-        )}
-
       </div>
     </div>
   );

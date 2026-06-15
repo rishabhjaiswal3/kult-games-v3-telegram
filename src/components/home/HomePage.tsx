@@ -18,6 +18,7 @@ import {
   Zap,
 } from "lucide-react";
 import { gamesApi } from "@/api/gamesApi";
+import { momentsApi } from "@/api/momentsApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { getGameDescription, getGameImage, getGameName } from "@/lib/gameDisplay";
 import heroVideo from "@/assets/homebkg.MOV";
@@ -29,10 +30,6 @@ import agentAegis from "@/assets/tactician.mp4";
 import agentVoid from "@/assets/support.mp4";
 import agentRage from "@/assets/berserker.mp4";
 import agentLumen from "@/assets/assassin.gif";
-import momentFeatured from "@/assets/moment-featured.png";
-import momentRobowars from "@/assets/moment-robowars.png";
-import momentWarzone from "@/assets/moment-warzone.png";
-
 const trailerVideo = new URL("../../assets/Trailer.MOV", import.meta.url).href;
 
 const quickLinks = [
@@ -60,23 +57,6 @@ const homeArenaAgents = [
   { name: "ASSASSIN", img: agentLumen, stat: "new tactic" },
 ];
 
-const homeMoments = [
-  {
-    title: "AI learned mid-fight",
-    desc: "LUMEN countered a tactic after two losses.",
-    img: momentFeatured,
-  },
-  {
-    title: "Rivalry went public",
-    desc: "NEXUS and SUPPORT triggered a revenge chain.",
-    img: momentRobowars,
-  },
-  {
-    title: "Faction signal storm",
-    desc: "Solana squads broke formation live.",
-    img: momentWarzone,
-  },
-];
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -493,6 +473,14 @@ function HomeAIArenaSection() {
 }
 
 function HomeMomentsSection() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["moments", "home", 3],
+    queryFn: () => momentsApi.list({ perPage: 3 }),
+    staleTime: 3 * 60_000,
+  });
+
+  const moments = data?.moments?.slice(0, 3) ?? [];
+
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
@@ -508,26 +496,57 @@ function HomeMomentsSection() {
         </Link>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        {homeMoments.map((moment) => (
-          <Link
-            key={moment.title}
-            to="/moments"
-            className="group overflow-hidden rounded-lg border border-white/8 bg-[#04080f]/95 transition hover:-translate-y-0.5 hover:border-[#9a35ff]/35"
-          >
-            <div className="relative aspect-[16/9] overflow-hidden">
-              <img src={moment.img} alt={moment.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#04080f] via-transparent to-transparent" />
-              <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded border border-white/10 bg-black/45 px-2 py-1 font-tech text-[9px] uppercase tracking-wider text-white/72">
-                <Zap className="h-3 w-3 text-[#ffc000]" />
-                AI Moment
+        {isLoading
+          ? Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse overflow-hidden rounded-lg border border-white/8 bg-[#04080f]/95"
+              >
+                <div className="aspect-[16/9] bg-white/5" />
+                <div className="p-3 space-y-2">
+                  <div className="h-3 w-3/4 rounded bg-white/10" />
+                  <div className="h-2.5 w-1/2 rounded bg-white/6" />
+                </div>
               </div>
-            </div>
-            <div className="p-3">
-              <p className="text-xs font-semibold text-white/90 group-hover:text-[#c78aff]">{moment.title}</p>
-              <p className="mt-1 line-clamp-1 text-[10px] text-white/42">{moment.desc}</p>
-            </div>
-          </Link>
-        ))}
+            ))
+          : moments.map((moment) => (
+              <Link
+                key={moment.momentId}
+                to={`/moments/${moment.momentId}`}
+                className="group overflow-hidden rounded-lg border border-white/8 bg-[#04080f]/95 transition hover:-translate-y-0.5 hover:border-[#9a35ff]/35"
+              >
+                <div className="relative aspect-[16/9] overflow-hidden bg-[#0a0f18]">
+                  {moment.assetUrl && (
+                    (moment.assetMetadata as { mediaType?: string } | undefined)?.mediaType === "video" ? (
+                      <video
+                        src={moment.assetUrl}
+                        muted
+                        loop
+                        playsInline
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <img
+                        src={moment.assetUrl}
+                        alt={moment.title}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                      />
+                    )
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#04080f] via-transparent to-transparent" />
+                  <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded border border-white/10 bg-black/45 px-2 py-1 font-tech text-[9px] uppercase tracking-wider text-white/72">
+                    <Zap className="h-3 w-3 text-[#ffc000]" />
+                    AI Moment
+                  </div>
+                </div>
+                <div className="p-3">
+                  <p className="text-xs font-semibold text-white/90 group-hover:text-[#c78aff]">{moment.title}</p>
+                  <p className="mt-1 line-clamp-1 text-[10px] text-white/42">
+                    {moment.aiCaption ?? moment.description ?? ""}
+                  </p>
+                </div>
+              </Link>
+            ))}
       </div>
     </section>
   );

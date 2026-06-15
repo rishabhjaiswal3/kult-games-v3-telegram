@@ -531,11 +531,6 @@
     }
   }
 
-  .inventory-hero {
-    background: linear-gradient(to bottom, hsl(220 35% 4% / 0.98) 85%, hsl(220 35% 4% / 0.92));
-    backdrop-filter: blur(10px);
-  }
-
   .inventory-sidebar-scroll {
     scrollbar-width: thin;
     scrollbar-color: rgba(154, 53, 255, 0.45) rgba(255, 255, 255, 0.05);

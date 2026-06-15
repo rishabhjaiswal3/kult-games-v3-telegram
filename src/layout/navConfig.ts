@@ -1,17 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Crown,
-  Cuboid,
   FileText,
   Gamepad2,
   Home,
-  LayoutDashboard,
+  Medal,
   Package,
   Sparkles,
-  Swords,
-  UserRoundCog,
   Trophy,
-  Bot,
 } from "lucide-react";
 
 export type NavItem = {
@@ -20,19 +16,17 @@ export type NavItem = {
   icon: LucideIcon;
   tag?: string;
   requiresAuth?: boolean;
+  /** When set, clicking the item navigates to this external URL instead of the internal path. */
+  externalUrl?: string;
 };
 
 export const APP_NAV_ITEMS: NavItem[] = [
   { label: "Home", path: "/", icon: Home },
+  { label: "League", path: "/league", icon: Medal },
   { label: "AI Arena", path: "/ai-arena", icon: Sparkles },
-  { label: "Dashboard", path: "/dashboard", icon: LayoutDashboard, requiresAuth: true },
   { label: "Games", path: "/games", icon: Gamepad2 },
-  { label: "My Agents", path: "/my-agents", icon: UserRoundCog, requiresAuth: true },
-  { label: "Training", path: "/training", icon: Cuboid },
-  { label: "Battles", path: "/battles", icon: Swords },
-  { label: "Inventory", path: "/inventory", icon: Package },
   { label: "Moments", path: "/moments", icon: FileText },
-  { label: "Autonomous", path: "/autonomous", icon: Bot },
+  { label: "Inventory", path: "/inventory", icon: Package },
   { label: "Achievements", path: "/achievements", icon: Trophy },
   { label: "Leaderboard", path: "/leaderboard", icon: Crown },
 ];

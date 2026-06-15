@@ -1,4 +1,6 @@
 import apiClient from "@/lib/apiClient";
+import { captureVideoThumbnail } from "@/lib/captureVideoThumbnail";
+import { compressMomentMediaFile, compressMomentOgImageFile } from "@/lib/compressMomentMedia";
 import { isRecord, pickNumber, pickString, unwrapApiData } from "@/api/utils";
 import type {
   ApiEnvelope,
@@ -305,10 +307,33 @@ export const momentsApi = {
     const presignedUpload = await presignMomentUpload(assetFile);
     const assetUrl = await uploadMomentAsset(presignedUpload, assetFile);
 
+    let enrichedMetadata: Record<string, unknown> = { ...metadata };
+    if (metadata.mediaType === "video") {
+      try {
+        const thumbnailBlob = await captureVideoThumbnail(assetFile);
+        const thumbnailFile = new File([thumbnailBlob], "thumbnail.jpg", { type: "image/jpeg" });
+        const { file: compressedThumb } = await compressMomentMediaFile(thumbnailFile);
+        const thumbPresign = await presignMomentUpload(compressedThumb);
+        const thumbnailUrl = await uploadMomentAsset(thumbPresign, compressedThumb);
+        enrichedMetadata = { ...metadata, thumbnailUrl };
+      } catch {
+        // Share preview falls back to default branding image if thumbnail upload fails.
+      }
+    } else if (metadata.mediaType === "image") {
+      try {
+        const { file: ogFile } = await compressMomentOgImageFile(assetFile);
+        const ogPresign = await presignMomentUpload(ogFile);
+        const ogImageUrl = await uploadMomentAsset(ogPresign, ogFile);
+        enrichedMetadata = { ...metadata, ogImageUrl };
+      } catch {
+        // og:image falls back to the main asset URL.
+      }
+    }
+
     return momentsApi.create({
       ...payload,
       assetUrl,
-      assetMetadata: metadata,
+      assetMetadata: enrichedMetadata,
     });
   },
 

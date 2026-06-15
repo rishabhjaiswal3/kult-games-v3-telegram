@@ -5,25 +5,31 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CreateAgentProvider } from "@/contexts/CreateAgentContext";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, Suspense } from "react";
 import gsap from "gsap";
-import Index from "./pages/Index";
-import Games from "./pages/Games";
-import Inventory from "./pages/Inventory";
-import MyAgentsPage from "./pages/MyAgentsPage";
-import TrainingPage from "./pages/TrainingPage";
-import BattlesPage from "./pages/BattlesPage";
-import Leaderboard from "./pages/Leaderboard";
-import GameDetail from "./pages/GameDetail";
-import GamePlay from "./pages/GamePlay";
-import NotFound from "./pages/NotFound";
-import AIArenaPage from "./pages/AIArenaPage";
-import MomentsPage from "./pages/MomentsPage";
-import Dashboard from "./pages/Dashboard";
-import AutonomousPage from "./pages/AutonomousPage";
-import AchievementsPage from "./pages/AchievementsPage";
-import ArenaGamePage from "./pages/ArenaGamePage";
-import RobowarGamePage from "./pages/RobowarGamePage";
+import { PageRouteFallback } from "@/components/PageRouteFallback";
+import { RouteChunkErrorBoundary } from "@/components/RouteChunkErrorBoundary";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import AllMomentsPage from "./pages/AllMomentsPage";
+import MomentDetailPage from "./pages/MomentDetailPage";
+
+const Index = lazyWithRetry(() => import("./pages/Index"));
+const Games = lazyWithRetry(() => import("./pages/Games"));
+const Inventory = lazyWithRetry(() => import("./pages/Inventory"));
+const MyAgentsPage = lazyWithRetry(() => import("./pages/MyAgentsPage"));
+const TrainingPage = lazyWithRetry(() => import("./pages/TrainingPage"));
+const BattlesPage = lazyWithRetry(() => import("./pages/BattlesPage"));
+const Leaderboard = lazyWithRetry(() => import("./pages/Leaderboard"));
+const GameDetail = lazyWithRetry(() => import("./pages/GameDetail"));
+const GamePlay = lazyWithRetry(() => import("./pages/GamePlay"));
+const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
+const AIArenaPage = lazyWithRetry(() => import("./pages/AIArenaPage"));
+const Dashboard = lazyWithRetry(() => import("./pages/Dashboard"));
+const AutonomousPage = lazyWithRetry(() => import("./pages/AutonomousPage"));
+const AchievementsPage = lazyWithRetry(() => import("./pages/AchievementsPage"));
+const LeaguePage = lazyWithRetry(() => import("./pages/LeaguePage"));
+const ArenaGamePage = lazyWithRetry(() => import("./pages/ArenaGamePage"));
+const RobowarGamePage = lazyWithRetry(() => import("./pages/RobowarGamePage"));
 import LoadingScreen from "./components/LoadingScreen";
 import { LoginModalHost } from "@/components/LoginModalHost";
 import KultAIFloating from "./components/KultAIFloating";
@@ -145,30 +151,37 @@ const App = () => {
             className={loaded ? "" : "pointer-events-none"}
             style={loaded ? { opacity: 1 } : { opacity: 0 }}
           >
-            <Routes>
-              <Route element={<AppShell />}>
-                <Route path="/" element={<Index />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/games" element={<Games />} />
-                <Route path="/my-agents" element={<MyAgentsPage />} />
-                <Route path="/training" element={<TrainingPage />} />
-                <Route path="/battles" element={<BattlesPage />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/marketplace" element={<Navigate to="/inventory" replace />} />
-                <Route path="/leaderboard" element={<Leaderboard />} />
-                <Route path="/ai-arena" element={<AIArenaPage />} />
-                <Route path="/moments" element={<MomentsPage />} />
-                <Route path="/autonomous" element={<AutonomousPage />} />
-                <Route path="/achievements" element={<AchievementsPage />} />
-                <Route path="/game/:id" element={<GameDetail />} />
-                <Route path="/game/:id/play" element={<GamePlay />} />
-              </Route>
-              {/* Full-screen arena game page — no AppShell sidebar */}
-              <Route path="/arena/game/:battleId" element={<ArenaGamePage />} />
-              {/* Robowar simulation page — red theme, no Unity, 120s sim */}
-              <Route path="/arena/robowar/:battleId" element={<RobowarGamePage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <RouteChunkErrorBoundary>
+              <Suspense fallback={<PageRouteFallback />}>
+                <Routes>
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/games" element={<Games />} />
+                  <Route path="/my-agents" element={<MyAgentsPage />} />
+                  <Route path="/training" element={<TrainingPage />} />
+                  <Route path="/battles" element={<BattlesPage />} />
+                  <Route path="/inventory" element={<Inventory />} />
+                  <Route path="/marketplace" element={<Navigate to="/inventory" replace />} />
+                  <Route path="/leaderboard" element={<Leaderboard />} />
+                  <Route path="/league" element={<LeaguePage />} />
+                  <Route path="/ai-arena" element={<AIArenaPage />} />
+                  <Route path="/moments" element={<AllMomentsPage />} />
+                  <Route path="/moments/browse" element={<AllMomentsPage />} />
+                  <Route path="/moments/:id" element={<MomentDetailPage />} />
+                  <Route path="/autonomous" element={<AutonomousPage />} />
+                  <Route path="/achievements" element={<AchievementsPage />} />
+                  <Route path="/game/:id" element={<GameDetail />} />
+                  <Route path="/game/:id/play" element={<GamePlay />} />
+                </Route>
+                {/* Full-screen arena game page — no AppShell sidebar */}
+                <Route path="/arena/game/:battleId" element={<ArenaGamePage />} />
+                {/* Robowar simulation page — red theme, no Unity, 120s sim */}
+                <Route path="/arena/robowar/:battleId" element={<RobowarGamePage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+              </Suspense>
+            </RouteChunkErrorBoundary>
           </div>
           <LoginModalHost />
           {loaded && <KultAIFloating />}

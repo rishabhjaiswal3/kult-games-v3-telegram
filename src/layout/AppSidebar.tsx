@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ArrowUpRight, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ArrowUpRight, Clapperboard, X, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import zeroGLogo from "@/assets/0G Logo.png";
 import kultLogo from "@/assets/Kult Logo.png";
 
@@ -34,27 +34,20 @@ function SidebarNav({
         const isActive =
           item.label === activeLabel ||
           (item.path !== "/" && location.pathname.startsWith(item.path));
-        return (
-          <Link
-            key={item.label}
-            to={item.path}
-            onClick={onNavigate}
-            title={isCollapsed ? item.label : undefined}
-            className={cn(
-              "sidebar-nav-item group relative flex min-h-[42px] py-1.5 items-center rounded-lg text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-300 font-tech",
-              isCollapsed ? "justify-center px-0" : "gap-3.5 px-4",
-              isActive
-                ? "sidebar-nav-active bg-gradient-to-r from-[#8f27ff]/30 via-[#8f27ff]/10 to-transparent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-[#8f27ff]/20"
-                : "text-white/55 hover:text-white hover:bg-white/5 hover:translate-x-1",
-            )}
-            style={{ animationDelay: `${idx * 30}ms` }}
-          >
-            {/* Active indicator bar */}
+
+        const sharedClassName = cn(
+          "sidebar-nav-item group relative flex min-h-[42px] py-1.5 items-center rounded-lg text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-300 font-tech",
+          isCollapsed ? "justify-center px-0" : "gap-3.5 px-4",
+          isActive
+            ? "sidebar-nav-active bg-gradient-to-r from-[#8f27ff]/30 via-[#8f27ff]/10 to-transparent text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] border border-[#8f27ff]/20"
+            : "text-white/55 hover:text-white hover:bg-white/5 hover:translate-x-1",
+        );
+
+        const innerContent = (
+          <>
             {isActive && (
               <span className="absolute left-0 top-0 bottom-0 w-[3px] rounded-r-full bg-gradient-to-b from-[#c084fc] via-[#9a35ff] to-[#6d28d9] shadow-[0_0_15px_rgba(154,53,255,0.9)]" />
             )}
-
-            {/* Icon container */}
             <span
               className={cn(
                 "flex shrink-0 items-center justify-center rounded-lg transition-all duration-200",
@@ -66,7 +59,6 @@ function SidebarNav({
             >
               <item.icon className="h-[18px] w-[18px]" />
             </span>
-
             {!isCollapsed && (
               item.tag ? (
                 <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
@@ -83,14 +75,38 @@ function SidebarNav({
                 <span className="min-w-0 flex-1">{item.label}</span>
               )
             )}
-
-            {/* Hover glow trail */}
             <span className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-gradient-to-r from-[#9a35ff]/[0.06] to-transparent" />
+          </>
+        );
+
+        if (item.externalUrl) {
+          return (
+            <a
+              key={item.label}
+              href={item.externalUrl}
+              onClick={onNavigate}
+              title={isCollapsed ? item.label : undefined}
+              className={sharedClassName}
+              style={{ animationDelay: `${idx * 30}ms` }}
+            >
+              {innerContent}
+            </a>
+          );
+        }
+
+        return (
+          <Link
+            key={item.label}
+            to={item.path}
+            onClick={onNavigate}
+            title={isCollapsed ? item.label : undefined}
+            className={sharedClassName}
+            style={{ animationDelay: `${idx * 30}ms` }}
+          >
+            {innerContent}
           </Link>
         );
       })}
-
-
     </nav>
   );
 }
@@ -148,10 +164,29 @@ export function AppSidebar({ activeLabel = "Home", isCollapsed, onToggleCollapse
     };
   }, []);
 
+  const { isAuthenticated } = useAuth();
+
   const sidebarContent = (onNavigate?: () => void) => (
     <>
       <SidebarBrand isCollapsed={isCollapsed} onToggleCollapse={onToggleCollapse} />
       <SidebarNav activeLabel={activeLabel} isCollapsed={isCollapsed} onNavigate={onNavigate} />
+
+      {/* Studio — sticky bottom */}
+      {isAuthenticated && (
+        <div className="shrink-0 border-t border-white/5 p-3">
+          <a
+            href="/studio"
+            onClick={onNavigate}
+            className={cn(
+              "group relative flex items-center rounded-lg bg-gradient-to-r from-[#9a35ff] to-[#7c2bcc] font-tech text-xs font-black uppercase tracking-wider text-white shadow-[0_0_20px_rgba(154,53,255,0.25)] transition-all hover:shadow-[0_0_28px_rgba(154,53,255,0.4)] hover:brightness-110",
+              isCollapsed ? "h-10 w-10 justify-center mx-auto" : "justify-center gap-2 px-4 py-2.5",
+            )}
+          >
+            <Clapperboard className="h-4 w-4 shrink-0" />
+            {!isCollapsed && <span>Studio</span>}
+          </a>
+        </div>
+      )}
     </>
   );
 

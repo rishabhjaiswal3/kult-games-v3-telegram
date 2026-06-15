@@ -30,7 +30,8 @@ export function ArenaDialogContent({
   return (
     <DialogContent
       className={cn(
-        "z-[100] grid max-h-[min(92vh,820px)] w-[calc(100vw-1.5rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden border border-white/15 bg-card/95 p-0 shadow-[0_0_80px_hsl(270_80%_45%/0.18)] sm:rounded-2xl",
+        "fixed left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] z-[201] flex max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top))] w-[calc(100vw-1.5rem)] -translate-x-1/2 translate-y-0 flex-col overflow-hidden border border-white/15 bg-card/95 p-0 shadow-[0_0_80px_hsl(270_80%_45%/0.18)] sm:rounded-2xl",
+        "data-[state=open]:slide-in-from-top-4 data-[state=closed]:slide-out-to-top-4",
         "[&>button]:right-4 [&>button]:top-4 [&>button]:z-20 [&>button]:rounded-lg [&>button]:border [&>button]:border-white/10 [&>button]:bg-background/80 [&>button]:p-1.5 [&>button]:text-foreground/80 [&>button]:opacity-100 [&>button]:backdrop-blur-sm [&>button]:hover:bg-background [&>button]:hover:text-foreground",
         SIZE_CLASS[size],
         className
@@ -63,7 +64,7 @@ export function ArenaDialogBody({
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("min-h-0 overflow-x-hidden overflow-y-auto px-5 py-4 sm:px-6", className)}
+      className={cn("min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-5 py-4 sm:px-6", className)}
       {...props}
     />
   );

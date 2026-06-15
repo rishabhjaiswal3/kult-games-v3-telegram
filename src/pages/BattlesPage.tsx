@@ -5,7 +5,10 @@ import {
   Activity,
   AlertTriangle,
   ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
   Crosshair,
+  Eye,
   Hexagon,
   Loader2,
   Radio,
@@ -31,6 +34,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAiArenaGatewaySession } from "@/hooks/useAiArenaGatewaySession";
 import { formatArenaWaitTime, useArenaBattleBoard } from "@/hooks/useArenaBattleBoard";
 import { useMyArenaAgents } from "@/hooks/useMyArenaAgents";
+import { getTrackedAiArenaBattleId } from "@/lib/arenaBattleStorage";
 import agentShadow from "@/assets/agent-shadow.jpg";
 import battleStep1 from "@/assets/step1.mp4";
 import battleStep2 from "@/assets/step2.mp4";
@@ -42,6 +46,7 @@ import { getRankFromElo } from "@/utils/rankSystem";
 import warzoneVideo from "@/assets/IMG_9260.MOV";
 import type {
   AiArenaAgent,
+  AiArenaAgentMemory,
   AiArenaBattle,
   AiArenaBattleSocketMessage,
   AiArenaMatchmakingStatusBody,
@@ -71,6 +76,13 @@ const gameModes: GameMode[] = [
     body: "Build. Upgrade. Destroy. Fight in intense robotic vehicle battles.",
     video: battleStep5,
     tone: "from-[#201007]/30 via-[#100b0c]/55 to-[#070910]/95",
+  },
+  {
+    title: "HIGHWAY HUSTLE",
+    tag: "RACING",
+    body: "High-speed chases on neon-lit highways. Dodge, boost, and outrun your rivals.",
+    video: battleStep3,
+    tone: "from-[#071820]/30 via-[#0b1016]/55 to-[#070910]/95",
   },
 ];
 
@@ -328,7 +340,7 @@ function GameModeCard({ mode }: { mode: GameMode }) {
         <img src={mode.image} alt="" className="absolute inset-0 h-full w-full object-cover opacity-78" />
       )}
       <div className={`absolute inset-0 bg-gradient-to-r ${mode.tone}`} />
-      <div className="relative z-10 flex h-full flex-col justify-between p-5">
+      <div className="relative z-10 h-full p-5">
         <div>
           <h3 className="font-tech text-4xl font-black italic tracking-[-0.04em] text-white drop-shadow">
             {mode.title}
@@ -338,14 +350,21 @@ function GameModeCard({ mode }: { mode: GameMode }) {
           </span>
           <p className="mt-2 max-w-[250px] text-xs leading-relaxed text-white/72">{mode.body}</p>
         </div>
-        <button
-          type="button"
-          className="flex h-10 w-[145px] items-center justify-center gap-3 rounded border border-[#9b32ff]/70 bg-[#170d26]/65 font-tech text-[10px]"
-        >
-          ENTER ARENA <ArrowUpRight className="h-4 w-4" />
-        </button>
       </div>
     </article>
+  );
+}
+
+function GameCarouselSection() {
+  return (
+    <section className="mt-7">
+      <h2 className="font-tech text-sm uppercase tracking-[0.08em]">CHOOSE YOUR GAME</h2>
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {gameModes.map((mode) => (
+          <GameModeCard key={mode.title} mode={mode} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -430,6 +449,230 @@ function Rewards() {
         VIEW ALL REWARDS <ArrowUpRight className="h-4 w-4" />
       </button>
     </aside>
+  );
+}
+
+function MyBattlesCarouselSection({
+  agents,
+  loading,
+}: {
+  agents: AiArenaAgent[];
+  loading: boolean;
+}) {
+  type OwnedBattleMemory = AiArenaAgentMemory & { ownerAgentId: string };
+  const memoriesQ = useQuery({
+    queryKey: ["aiArenaGateway", "battlesPageBattleMemories", agents.map((a) => a.id).join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        agents.map((agent) => aiArenaGatewayApi.getAgentMemories(agent.id, 1, 100))
+      );
+      const uniqueMemories = new Map<string, OwnedBattleMemory>();
+      results.forEach((result, index) => {
+        const ownerAgentId = agents[index]?.id;
+        if (!ownerAgentId) return;
+        result.memories.forEach((memory) => {
+          const key = memory.metadata?.battleId ?? memory.id;
+          if (!uniqueMemories.has(key)) uniqueMemories.set(key, { ...memory, ownerAgentId });
+        });
+      });
+      return Array.from(uniqueMemories.values()).sort(
+        (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+      );
+    },
+    enabled: agents.length > 0,
+    staleTime: 30_000,
+  });
+  const memories = memoriesQ.data ?? [];
+
+  const battleIds = useMemo(
+    () => memories.map((m) => m.metadata?.battleId).filter((id): id is string => Boolean(id)),
+    [memories]
+  );
+  const battleDetailsQ = useQuery({
+    queryKey: ["aiArenaGateway", "battlesPageMemoryBattles", battleIds.join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        battleIds.map(async (battleId) => {
+          try {
+            return (await aiArenaGatewayApi.getBattle(battleId)).battle;
+          } catch {
+            return null;
+          }
+        })
+      );
+      return results.filter((battle): battle is AiArenaBattle => Boolean(battle));
+    },
+    enabled: battleIds.length > 0,
+    staleTime: 60_000,
+  });
+  const battlesById = useMemo(
+    () => new Map((battleDetailsQ.data ?? []).map((battle) => [battle.id, battle])),
+    [battleDetailsQ.data]
+  );
+  const participantIds = useMemo(
+    () => Array.from(new Set((battleDetailsQ.data ?? []).flatMap((battle) => battle.agentIds ?? []))),
+    [battleDetailsQ.data]
+  );
+  const participantAgentsQ = useQuery({
+    queryKey: ["aiArenaGateway", "battlesPageMemoryParticipants", participantIds.join(",")],
+    queryFn: async () =>
+      Promise.all(
+        participantIds.map(async (agentId) => {
+          const ownedAgent = agents.find((a) => a.id === agentId);
+          if (ownedAgent) return ownedAgent;
+          try {
+            return await aiArenaGatewayApi.getAgentById(agentId);
+          } catch {
+            return fallbackArenaAgent(agentId);
+          }
+        })
+      ),
+    enabled: participantIds.length > 0,
+    staleTime: 60_000,
+  });
+  const agentsById = useMemo(
+    () => new Map([...agents, ...(participantAgentsQ.data ?? [])].map((a) => [a.id, a])),
+    [agents, participantAgentsQ.data]
+  );
+
+  const CARDS_PER_PAGE = 3;
+  const [battlePage, setBattlePage] = useState(0);
+  const totalBattlePages = Math.max(1, Math.ceil(memories.length / CARDS_PER_PAGE));
+  const canPrevBattle = battlePage > 0;
+  const canNextBattle = battlePage < totalBattlePages - 1;
+
+  return (
+    <section className="mt-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="font-tech text-sm uppercase tracking-[0.08em]">MY BATTLES</h2>
+          <p className="mt-1 text-[10px] text-white/45">Your completed arena battle history.</p>
+        </div>
+        {memories.length > CARDS_PER_PAGE && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBattlePage((p) => Math.max(0, p - 1))}
+              disabled={!canPrevBattle}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-white transition hover:border-primary/60 hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[3ch] text-center font-tech text-[10px] text-white/45">
+              {battlePage + 1}/{totalBattlePages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setBattlePage((p) => Math.min(totalBattlePages - 1, p + 1))}
+              disabled={!canNextBattle}
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-white transition hover:border-primary/60 hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {loading || memoriesQ.isLoading ? (
+        <div className="arena-panel flex items-center gap-2 px-5 py-8 text-sm text-white/55">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading your battles...
+        </div>
+      ) : memoriesQ.isError || memories.length === 0 ? (
+        <div className="arena-panel px-5 py-8 text-center">
+          <Swords className="mx-auto h-7 w-7 text-white/20" />
+          <p className="mt-3 text-sm text-white/55">No completed or cancelled battles yet. Start matchmaking to enter the arena.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden">
+          <div
+            className="flex transition-transform duration-500 ease-in-out"
+            style={{ transform: `translateX(-${battlePage * 100}%)` }}
+          >
+            {Array.from({ length: totalBattlePages }, (_, pageIdx) => (
+              <div
+                key={pageIdx}
+                className="grid w-full flex-shrink-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
+              >
+                {memories
+                  .slice(pageIdx * CARDS_PER_PAGE, pageIdx * CARDS_PER_PAGE + CARDS_PER_PAGE)
+                  .map((memory) => {
+                    const battleId = memory.metadata?.battleId;
+                    const battle = battleId ? battlesById.get(battleId) : undefined;
+                    const participants = (battle?.agentIds ?? [memory.ownerAgentId])
+                      .map((agentId) => agentsById.get(agentId))
+                      .filter((agent): agent is AiArenaAgent => Boolean(agent));
+                    const outcome = String(memory.metadata?.outcome ?? memory.type).toUpperCase();
+                    const isWin = outcome === "WIN";
+                    const isCancelled = outcome === "CANCELLED";
+
+                    return (
+                      <div key={memory.id} className="card-glass rounded-xl border border-primary/20 p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className={`rounded-full border px-2.5 py-1 font-tech text-[9px] uppercase ${
+                            isCancelled
+                              ? "border-white/20 bg-white/5 text-white/55"
+                              : isWin
+                              ? "border-emerald-400/35 bg-emerald-500/10 text-emerald-300"
+                              : "border-rose-400/35 bg-rose-500/10 text-rose-300"
+                          }`}>
+                            {isCancelled ? "Cancelled" : isWin ? "Win" : "Loss"}
+                          </span>
+                          <span className="font-tech text-[9px] uppercase text-accent">Battle Memory</span>
+                        </div>
+                        <div className="mt-4 flex items-center gap-3">
+                          {participants.map((agent, index) => (
+                            <div key={agent.id} className="flex items-center gap-3">
+                              {index > 0 ? <span className="font-display text-sm font-bold text-primary">VS</span> : null}
+                              <div className="text-center">
+                                <ArenaAgentThumbnail
+                                  agent={agent}
+                                  size="md"
+                                  className="h-20 w-20 rounded-xl border-2 border-primary/25"
+                                />
+                                <p className="mt-1 max-w-20 truncate font-tech text-[8px] text-white/55">{agent.name}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-4 font-mono text-[11px] italic leading-relaxed text-white/65">{memory.content}</p>
+                        <p className="mt-2 font-mono text-[10px] text-white/40">
+                          {new Date(memory.createdAt).toLocaleString()}
+                        </p>
+                        {battleId ? (
+                          <Link
+                            to={`/arena/game/${battleId}`}
+                            className="mt-4 inline-flex items-center gap-2 font-tech text-[9px] font-bold uppercase text-primary hover:text-white"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Open Battle {shortId(battleId)}
+                          </Link>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+              </div>
+            ))}
+          </div>
+          {totalBattlePages > 1 && (
+            <div className="mt-5 flex items-center justify-center gap-2">
+              {Array.from({ length: totalBattlePages }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setBattlePage(i)}
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    i === battlePage
+                      ? "w-6 bg-primary"
+                      : "w-1.5 bg-white/20 hover:bg-white/40"
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -686,6 +929,7 @@ const BattlesPage = () => {
   const myAgentsQ = useMyArenaAgents(1, 50);
   const myAgents = myAgentsQ.data?.agents ?? [];
   const myAgentIds = useMemo(() => new Set(myAgents.map((agent) => agent.id)), [myAgents]);
+  const trackedBattleId = getTrackedAiArenaBattleId();
 
   const [startModalOpen, setStartModalOpen] = useState(false);
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -723,6 +967,30 @@ const BattlesPage = () => {
     staleTime: 2_000,
     refetchInterval: 2_000,
     retry: 1,
+  });
+
+  const myBattlesQ = useQuery({
+    queryKey: ["aiArenaGateway", "battlesPageHistory", myAgents.map((agent) => agent.id).join(",")],
+    queryFn: async () => {
+      const results = await Promise.all(
+        myAgents.flatMap((agent) =>
+          ["COMPLETED", "CANCELLED"].map((status) =>
+            aiArenaGatewayApi.getAgentBattles(agent.id, { status, limit: 100 })
+          )
+        )
+      );
+      const uniqueBattles = new Map<string, AiArenaBattle>();
+      results.forEach((result) => {
+        result.battles.forEach((battle) => uniqueBattles.set(battle.id, battle));
+      });
+      return Array.from(uniqueBattles.values()).sort((left, right) => {
+        const leftTime = new Date(left.endedAt ?? left.startedAt ?? left.createdAt ?? 0).getTime();
+        const rightTime = new Date(right.endedAt ?? right.startedAt ?? right.createdAt ?? 0).getTime();
+        return rightTime - leftTime;
+      });
+    },
+    enabled: isAuthenticated && isAiArenaReady && myAgents.length > 0,
+    staleTime: 30_000,
   });
 
   const battleBoardQ = useArenaBattleBoard({ maxRankedPairs: 8 });
@@ -959,12 +1227,7 @@ const BattlesPage = () => {
         <RankCard firstAgent={myAgents[0] ?? null} />
       </div>
 
-      <SectionTitle>CHOOSE YOUR GAME</SectionTitle>
-      <div className="grid gap-3 xl:grid-cols-2">
-        {gameModes.map((mode) => (
-          <GameModeCard key={mode.title} mode={mode} />
-        ))}
-      </div>
+      <GameCarouselSection />
 
       <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
@@ -1393,6 +1656,11 @@ const BattlesPage = () => {
           </div>
         </aside>
       </div>
+
+      <MyBattlesCarouselSection
+        agents={myAgents}
+        loading={myAgentsQ.isLoading}
+      />
 
       <ArenaStartMatchmakingModal
         open={startModalOpen}

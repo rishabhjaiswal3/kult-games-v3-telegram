@@ -23,7 +23,7 @@ function Fighter({
         {isRight ? null : (
           <ArenaAgentThumbnail
             agent={{ id: agent.id, archetype: agent.archetype ?? undefined, name: agent.name ?? undefined }}
-            className="h-14 w-14 rounded-xl"
+            className="h-14 w-14 rounded-xl transition duration-500 group-hover:scale-105 group-hover:shadow-[0_0_18px_rgba(154,53,255,0.3)]"
             size="md"
           />
         )}
@@ -34,7 +34,7 @@ function Fighter({
         {isRight ? (
           <ArenaAgentThumbnail
             agent={{ id: agent.id, archetype: agent.archetype ?? undefined, name: agent.name ?? undefined }}
-            className="h-14 w-14 rounded-xl"
+            className="h-14 w-14 rounded-xl transition duration-500 group-hover:scale-105 group-hover:shadow-[0_0_18px_rgba(154,53,255,0.3)]"
             size="md"
           />
         ) : null}
@@ -109,7 +109,10 @@ export function ArenaBattleBoardCard({
 }: ArenaBattleBoardCardProps) {
   if (item.kind === "open-lobby") {
     return (
-      <article className="card-glass rounded-xl p-4 sm:p-5">
+      <article className="card-glass group relative overflow-hidden rounded-xl border border-white/10 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition-all duration-500 hover:-translate-y-1.5 hover:border-accent/55 hover:shadow-[0_22px_55px_rgba(0,0,0,0.42),0_0_30px_rgba(154,53,255,0.2)] sm:p-5">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(154,53,255,0.16),transparent_42%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        <div className="pointer-events-none absolute -left-1/2 top-0 h-full w-1/4 skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-all duration-700 group-hover:left-[125%] group-hover:opacity-100" />
+        <div className="relative z-10">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3 text-center sm:text-left">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
@@ -148,12 +151,16 @@ export function ArenaBattleBoardCard({
             {item.status.gameId ?? "Arena queue"} · {formatLobbyMode(item.status.mode)}
           </span>
         </div>
+        </div>
       </article>
     );
   }
 
   return (
-    <article className="card-glass rounded-xl p-4 sm:p-5">
+    <article className="card-glass group relative overflow-hidden rounded-xl border border-white/10 p-4 shadow-[0_16px_40px_rgba(0,0,0,0.28)] transition-all duration-500 hover:-translate-y-1.5 hover:border-red-400/45 hover:shadow-[0_22px_55px_rgba(0,0,0,0.42),0_0_30px_rgba(239,68,68,0.16)] sm:p-5">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(239,68,68,0.12),transparent_42%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+      <div className="pointer-events-none absolute -left-1/2 top-0 h-full w-1/4 skew-x-[-18deg] bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-0 transition-all duration-700 group-hover:left-[125%] group-hover:opacity-100" />
+      <div className="relative z-10">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 text-center sm:text-left">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -200,6 +207,7 @@ export function ArenaBattleBoardCard({
           actionLoading={actionLoading}
         />
         <span className="text-xs text-muted-foreground">{item.watchLabel}</span>
+      </div>
       </div>
     </article>
   );

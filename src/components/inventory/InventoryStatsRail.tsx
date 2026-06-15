@@ -6,6 +6,7 @@ type InventoryStatsRailProps = {
   categoriesCount: number;
   gamesCount: number;
   activeGameLabel: string;
+  isLoading?: boolean;
   className?: string;
 };
 
@@ -14,13 +15,14 @@ export function InventoryStatsRail({
   categoriesCount,
   gamesCount,
   activeGameLabel,
+  isLoading = false,
   className,
 }: InventoryStatsRailProps) {
   const stats = [
-    { label: "Assets", value: String(listingsCount), icon: Package, color: "#9a35ff" },
-    { label: "Categories", value: String(categoriesCount), icon: Coins, color: "#ffc000" },
-    { label: "Games", value: String(gamesCount), icon: FileBox, color: "#00f080" },
-    { label: "Filter", value: activeGameLabel, icon: Layers, color: "#0089ff", truncate: true },
+    { label: "Assets", value: isLoading ? "…" : String(listingsCount), icon: Package, color: "#9a35ff" },
+    { label: "Categories", value: isLoading ? "…" : String(categoriesCount), icon: Coins, color: "#ffc000" },
+    { label: "Games", value: isLoading ? "…" : String(gamesCount), icon: FileBox, color: "#00f080" },
+    { label: "Filter", value: isLoading ? "Loading…" : activeGameLabel, icon: Layers, color: "#0089ff", truncate: true },
   ] as const;
 
   return (
