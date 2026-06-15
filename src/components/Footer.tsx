@@ -1,15 +1,13 @@
 import kultLogo from "@/assets/Kult Logo.png";
 import zeroGLogo from "@/assets/0G Logo.png";
-import { BrainCircuit, BriefcaseBusiness, Gamepad2, Trophy, Video } from "lucide-react";
+import { BrainCircuit, Home, Medal } from "lucide-react";
 import { Link } from "react-router-dom";
 import sceneVideo from "@/assets/Scene 1.mp4";
 
 const platformLinks = [
-  { label: "Games", href: "/", icon: Gamepad2 },
-  { label: "Inventory", href: "/inventory", icon: BriefcaseBusiness },
+  { label: "Home", href: "/", icon: Home },
   { label: "AI Arena", href: "/ai-arena", icon: BrainCircuit },
-  { label: "Moments", href: "/moments", icon: Video },
-  { label: "Leaderboard", href: "/leaderboard", icon: Trophy },
+  { label: "League", href: "/league", icon: Medal },
 ];
 
 const socials = [

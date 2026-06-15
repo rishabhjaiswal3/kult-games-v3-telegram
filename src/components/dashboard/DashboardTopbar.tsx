@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Bell, Clapperboard, Menu } from "lucide-react";
+import { Bell, Menu } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { requestOpenLoginModal } from "@/lib/loginModalBus";
 import dashboardAvatar from "@/assets/dashboard-avatar.png";
@@ -40,7 +40,7 @@ export function DashboardTopbar() {
       <header ref={containerRef} className="relative z-30 shrink-0 border-b border-white/10 bg-[#03070d]/88 backdrop-blur-xl">
         <div className="relative mx-auto flex min-h-[58px] max-w-full flex-nowrap items-center justify-between gap-1.5 px-3 py-2 sm:min-h-[68px] sm:gap-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
-            <Link to="/dashboard" aria-label="Open dashboard" className="shrink-0 sm:hidden">
+            <Link to="/" aria-label="Open home" className="shrink-0 sm:hidden">
               <img
                 src={dashboardAvatar}
                 alt="Profile"
@@ -49,16 +49,7 @@ export function DashboardTopbar() {
             </Link>
           </div>
           <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5 sm:gap-3">
-            {isAuthenticated && (
-              <a
-                href="/studio"
-                className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center gap-2 rounded-md bg-[#9a35ff] px-0 font-tech text-[11px] font-black uppercase tracking-wider text-white transition hover:brightness-110 min-[430px]:w-auto min-[430px]:px-4 sm:text-xs"
-              >
-                <Clapperboard className="h-4 w-4" />
-                <span className="hidden min-[430px]:inline">Studio</span>
-              </a>
-            )}
-            <Link to="/dashboard" aria-label="Open dashboard" className="hidden shrink-0 sm:block">
+            <Link to="/" aria-label="Open home" className="hidden shrink-0 sm:block">
               <img
                 src={dashboardAvatar}
                 alt="Profile"
@@ -121,8 +112,8 @@ export function DashboardTopbar() {
                   <Link to="/ai-arena" className="block rounded border border-white/8 bg-white/[0.02] p-3 hover:bg-white/5">
                     Training slot completed
                   </Link>
-                  <Link to="/leaderboard" className="block rounded border border-white/8 bg-white/[0.02] p-3 hover:bg-white/5">
-                    New achievement progress unlocked
+                  <Link to="/league" className="block rounded border border-white/8 bg-white/[0.02] p-3 hover:bg-white/5">
+                    League standings have been updated
                   </Link>
                 </div>
               </div>

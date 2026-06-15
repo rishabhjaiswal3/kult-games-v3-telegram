@@ -34,7 +34,6 @@ import LoadingScreen from "./components/LoadingScreen";
 import { LoginModalHost } from "@/components/LoginModalHost";
 import KultAIFloating from "./components/KultAIFloating";
 import { AppShell } from "@/layout/AppShell";
-import { gamesApi } from "@/api/gamesApi";
 
 const SPLASH_SEEN_KEY = "kult_splash_seen";
 
@@ -127,15 +126,6 @@ const App = () => {
       y: 0,
     });
   }, [loaded, showPreview]);
-
-  /** Start loading game list + thumbnails as soon as the shell mounts (overlaps splash). */
-  useEffect(() => {
-    void queryClient.prefetchQuery({
-      queryKey: ["games", "all"],
-      queryFn: () => gamesApi.getAll(1, 50),
-      staleTime: 5 * 60_000,
-    });
-  }, [queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

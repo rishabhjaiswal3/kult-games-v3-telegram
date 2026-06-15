@@ -16,10 +16,8 @@ import {
   Sparkles,
   Loader2,
   BrainCircuit,
-  BriefcaseBusiness,
   Gamepad2,
   Trophy,
-  Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
@@ -1586,11 +1584,9 @@ function PartnersBlock() {
 
 function ArenaLandingFooter() {
   const platformLinks = [
-    { label: "Games", href: "/", icon: Gamepad2 },
-    { label: "Inventory", href: "/inventory", icon: BriefcaseBusiness },
+    { label: "Home", href: "/", icon: Gamepad2 },
     { label: "AI Arena", href: "/ai-arena", icon: BrainCircuit },
-    { label: "Moments", href: "/moments", icon: Video },
-    { label: "Leaderboard", href: "/leaderboard", icon: Trophy },
+    { label: "League", href: "/league", icon: Trophy },
   ];
 
   const socials = [
