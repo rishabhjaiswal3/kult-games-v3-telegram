@@ -8,6 +8,10 @@ export { HomeHeroSkeleton } from "@/components/skeleton/HomeHeroSkeleton";
 export { HomePageSkeleton } from "@/components/skeleton/HomePageSkeleton";
 export { ArenaOpenLobbyCardSkeleton, ArenaOpenLobbyGridSkeleton } from "@/components/skeleton/ArenaOpenLobbyCardSkeleton";
 export {
+  ArenaBattleBoardCardSkeleton,
+  ArenaBattleBoardGridSkeleton,
+} from "@/components/skeleton/ArenaBattleBoardSkeleton";
+export {
   ArenaAgentRowSkeleton,
   ArenaAgentRowItemsSkeleton,
   ArenaAgentRowListSkeleton,

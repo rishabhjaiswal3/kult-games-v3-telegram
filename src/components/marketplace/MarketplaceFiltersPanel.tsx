@@ -49,7 +49,7 @@ export function MarketplaceFiltersPanel({
             </div>
             <div>
               <p className="font-display text-sm font-black tracking-[0.08em] text-foreground">FILTERS</p>
-              <p className="text-[10px] text-muted-foreground">Browse every game or narrow in</p>
+              {/* <p className="text-[10px] text-muted-foreground">Browse every game or narrow in</p> */}
             </div>
           </div>
           <button

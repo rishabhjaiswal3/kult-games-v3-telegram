@@ -15,10 +15,19 @@ export default {
     extend: {
       fontFamily: {
         display: ["Orbitron", "sans-serif"],
+        tech: ["Orbitron", "sans-serif"],
         body: ["Inter", "sans-serif"],
         mono: ["JetBrains Mono", "monospace"],
+        marker: ["Permanent Marker", "cursive"],
       },
       colors: {
+        arena: {
+          bg: "#03070d",
+          sidebar: "#050913",
+          purple: "#9a35ff",
+          gold: "#ffc000",
+          green: "#00f080",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

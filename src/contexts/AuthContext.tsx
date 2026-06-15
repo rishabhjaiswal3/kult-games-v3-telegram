@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { getIdentityToken, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCreateWallet } from "@privy-io/react-auth/extended-chains";
 import { toast } from "sonner";
 import { playerApi } from "@/api/playerApi";
@@ -10,18 +10,24 @@ import {
   exchangePrivyTokenForAiArenaToken,
   getAiArenaAccessToken,
 } from "@/lib/aiArenaAuth";
-import { getPrivyIdentityToken, getTonWalletAddressFromPrivyUser } from "@/lib/privyAccounts";
 import { buildSiweMessage, fetchSiweNonce } from "@/lib/siwe";
 import { requestOpenLoginModal } from "@/lib/loginModalBus";
 import { getAllowedChainFromEnv } from "@/lib/chain";
 import { ensureWalletOnAllowedChain } from "@/lib/ensureWalletChain";
-import { getTelegramDisplayName, isTelegramMiniApp } from "@/lib/telegramMiniApp";
+import { getTonWalletAddressFromPrivyUser } from "@/lib/privyAccounts";
+import {
+  getTelegramDisplayName,
+  getTelegramWebApp,
+  isTelegramMiniApp,
+} from "@/lib/telegramMiniApp";
 import {
   isEmbeddedPrivyConnectedWallet,
   pickSigningWallet,
   resolvePrivyWalletAddress,
 } from "@/lib/privyWallet";
 import type { Player } from "@/types/api";
+
+// ── Context type ──────────────────────────────────────────────────────────────
 
 interface AuthContextValue {
   player: Player | null;
@@ -37,10 +43,41 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 /** Dedupes SIWE across React Strict Mode remounts (refs reset; a second `personal_sign` was still fired). */
 const siweInFlightByAddress = new Map<string, Promise<void>>();
+const SIGNING_WALLET_WAIT_MS = 8_000;
+const SIGNING_WALLET_POLL_MS = 250;
+const TELEGRAM_WALLET_LOGIN_INTENT_KEY = "kult_telegram_wallet_login_intent";
+
+function hasTelegramWalletLoginIntent() {
+  return sessionStorage.getItem(TELEGRAM_WALLET_LOGIN_INTENT_KEY) === "1";
+}
+
+function clearTelegramWalletLoginIntent() {
+  sessionStorage.removeItem(TELEGRAM_WALLET_LOGIN_INTENT_KEY);
+}
+
+function isMissingSigningWalletError(error: unknown) {
+  return error instanceof Error && error.message === "No Privy wallet available to sign";
+}
+
+async function waitForSigningWallet(
+  getWallet: () => ReturnType<typeof pickSigningWallet>,
+  timeoutMs = SIGNING_WALLET_WAIT_MS,
+): Promise<ReturnType<typeof pickSigningWallet>> {
+  const startedAt = Date.now();
+  let wallet = getWallet();
+
+  while (!wallet && Date.now() - startedAt < timeoutMs) {
+    await new Promise((resolve) => window.setTimeout(resolve, SIGNING_WALLET_POLL_MS));
+    wallet = getWallet();
+  }
+
+  return wallet;
+}
+
+// ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const privy = usePrivy();
-  const { ready, authenticated, user, getAccessToken, logout: privyLogout } = privy;
+  const { ready, authenticated, user, getAccessToken, logout: privyLogout } = usePrivy();
   const { wallets } = useWallets();
   const { createWallet } = useCreateWallet();
 
@@ -71,6 +108,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const telegramLoginInFlightRef = useRef(false);
+  useEffect(() => {
+    if (!isTelegramMiniApp() || hasTelegramWalletLoginIntent() || player) return;
+    if (telegramLoginInFlightRef.current || isLoading) return;
+
+    const existingToken = localStorage.getItem(TOKEN_KEY);
+    if (existingToken) {
+      void fetchProfile();
+      return;
+    }
+
+    const initData = getTelegramWebApp()?.initData;
+    if (!initData) return;
+
+    telegramLoginInFlightRef.current = true;
+    setIsLoading(true);
+    void playerApi.loginWithTelegramMiniApp(initData, getTelegramDisplayName())
+      .then((result) => setPlayer(result.player))
+      .catch((err) => {
+        console.error("[TelegramMiniApp] Login failed:", err);
+        toast.error("Could not sign in with Telegram. Please reopen the Mini App.");
+      })
+      .finally(() => {
+        telegramLoginInFlightRef.current = false;
+        setIsLoading(false);
+      });
+  }, [player, isLoading, fetchProfile]);
+
   // Privy may provision embedded wallets a moment after email/Google auth — wait without calling createWallet again.
   useEffect(() => {
     if (!ready || !authenticated || resolvedAddress || tonAddress) return;
@@ -79,9 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [ready, authenticated, resolvedAddress, tonAddress]);
 
-  // In Telegram, prefer a Privy TON embedded wallet and exchange a verified identity token for the Kult JWT.
   useEffect(() => {
     if (!ready || !authenticated || !isTelegramMiniApp()) return;
+    if (!hasTelegramWalletLoginIntent() && getTelegramWebApp()?.initData) return;
 
     if (!tonAddress && !attemptedTonWalletCreateRef.current) {
       attemptedTonWalletCreateRef.current = true;
@@ -89,53 +154,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void createWallet({ chainType: "ton" as const })
         .catch((err) => {
           console.error("[TON] Wallet creation failed:", err);
-          toast.error("Could not create TON wallet. Please try again.");
+          toast.error("Could not create the TON wallet.");
         })
         .finally(() => setIsLoading(false));
       return;
     }
-
     if (!tonAddress) return;
 
     const existingToken = localStorage.getItem(TOKEN_KEY);
     const existingWallet = localStorage.getItem(WALLET_KEY);
-
     if (existingToken && existingWallet === tonAddress) {
       void fetchProfile();
       return;
     }
 
     setIsLoading(true);
-
     void (async () => {
-      const identityToken = await getPrivyIdentityToken(privy);
-      if (!identityToken) {
-        throw new Error("Privy identity token is unavailable. Enable identity tokens in the Privy dashboard.");
-      }
-
-      const res = await playerApi.loginWithPrivyTon(tonAddress, identityToken, {
+      const identityToken = await getIdentityToken();
+      if (!identityToken) throw new Error("Privy identity token is unavailable");
+      const result = await playerApi.loginWithPrivyTon(tonAddress, identityToken, {
         name: getTelegramDisplayName(),
       });
-      setPlayer(res.player);
-
-      const privyAccessToken = await getAccessTokenRef.current();
-      if (privyAccessToken) {
-        await exchangePrivyTokenForAiArenaToken(privyAccessToken);
-      }
+      setPlayer(result.player);
+      clearTelegramWalletLoginIntent();
     })()
       .catch((err) => {
         console.error("[TON] Login failed:", err);
         playerApi.logout();
-        toast.error("Could not finish Telegram sign-in. Please refresh and try again.");
+        toast.error("Could not verify the TON wallet.");
       })
       .finally(() => setIsLoading(false));
-  }, [ready, authenticated, tonAddress, createWallet, fetchProfile, privy]);
+  }, [ready, authenticated, tonAddress, createWallet, fetchProfile]);
 
-  // When Privy authenticates outside Telegram, run the full SIWE flow and AI Arena token exchange.
+  // When Privy authenticates, run the full SIWE flow and AI Arena token exchange.
   useEffect(() => {
     if (!ready) return;
     if (!authenticated) return;
     if (isTelegramMiniApp() && tonAddress) return;
+    if (isTelegramMiniApp() && !hasTelegramWalletLoginIntent()) return;
 
     const address = resolvedAddress;
     if (!address) return;
@@ -174,8 +230,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nonce = await fetchSiweNonce(address);
       const message = buildSiweMessage(address, nonce);
 
-      const currentWallets = walletsRef.current;
-      const privyWallet = pickSigningWallet(currentWallets, address);
+      const privyWallet = await waitForSigningWallet(() =>
+        pickSigningWallet(walletsRef.current, address)
+      );
       if (!privyWallet) throw new Error("No Privy wallet available to sign");
 
       const allowedChain = getAllowedChainFromEnv();
@@ -202,6 +259,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const res = await playerApi.login(address, message, signature);
       setPlayer(res.player);
+      clearTelegramWalletLoginIntent();
 
       const privyAccessToken = await getAccessTokenRef.current();
       if (privyAccessToken) {
@@ -212,9 +270,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     siweInFlightByAddress.set(addrKey, run);
 
     void run
-      .catch((err) => {
+      .catch(async (err) => {
         console.error("[SIWE] Login failed:", err);
         playerApi.logout();
+
+        if (isMissingSigningWalletError(err)) {
+          try {
+            await privyLogout();
+          } catch {
+            /* best-effort session reset */
+          }
+
+          requestOpenLoginModal({
+            mode: "recover",
+            message:
+              "No wallet was available to finish sign-in. Please choose wallet, email, or Google to continue.",
+          });
+          toast.error(
+            "No wallet was available to finish sign-in. Please choose wallet, email, or Google to continue."
+          );
+          return;
+        }
+
         toast.error("Could not finish sign-in. Please try wallet login or refresh the page.");
       })
       .finally(() => {
@@ -227,6 +304,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const handleLogout = async () => {
     siweInFlightByAddress.clear();
+    clearTelegramWalletLoginIntent();
     playerApi.logout();
     clearAiArenaAuthTokens();
     clearAiAgentInfo();
@@ -239,8 +317,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         player,
         walletAddress,
-        isAuthenticated: authenticated && !!localStorage.getItem(TOKEN_KEY),
-        isLoading: !ready || isLoading,
+        isAuthenticated: !!localStorage.getItem(TOKEN_KEY),
+        isLoading: (!ready && !isTelegramMiniApp()) || isLoading,
         login: requestOpenLoginModal,
         logout: handleLogout,
         refetchProfile: fetchProfile,

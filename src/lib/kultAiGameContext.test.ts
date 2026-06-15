@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { gamesApi } from "@/api/gamesApi";
 import { buildCatalogGroundedPrompt, mergeWithKnownKultGames, selectClosestCatalogGames } from "@/lib/kultAiGameContext";
@@ -46,10 +46,6 @@ const guess: Game = {
 };
 
 describe("kultAiGameContext", () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   it("selects closest catalog games from approximate names", () => {
     const selected = selectClosestCatalogGames("compare highway hustle and robowar", [mage, highway, robo], 2);
 
@@ -136,38 +132,6 @@ describe("kultAiGameContext", () => {
     const guessEntries = merged.filter((game) => game.identification === "guesstheai");
 
     expect(guessEntries).toHaveLength(1);
-  });
-
-  it("overrides stale known-game API facts and omits raw developer knowledge base text", async () => {
-    vi.mocked(gamesApi.getAll).mockResolvedValue({
-      games: [
-        {
-          ...guess,
-          category: "Action",
-          metadata: {
-            developer_knowledge_base: "Guess the AI is an Action game with unsupported hidden facts.",
-          },
-        },
-      ],
-      totalCount: 1,
-      page: 1,
-      pageSize: 100,
-      totalPages: 1,
-    });
-    vi.mocked(gamesApi.getById).mockResolvedValue({
-      ...guess,
-      category: "Action",
-      metadata: {
-        developer_knowledge_base: "Guess the AI is an Action game with unsupported hidden facts.",
-      },
-    });
-
-    const prompt = await buildCatalogGroundedPrompt("Tell me about Guess the AI");
-
-    expect(prompt).toContain("Category: Puzzle");
-    expect(prompt).toContain("Known limitations: Do not describe Guess the AI as an Action game.");
-    expect(prompt).not.toContain("Guess the AI is an Action game with unsupported hidden facts.");
-    expect(prompt).not.toContain("developer_knowledge_base");
   });
 
   it("uses the known app roster when the catalog is unavailable", async () => {

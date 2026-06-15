@@ -66,7 +66,7 @@ export function ArenaQueueAgentGridSkeleton({ count = 2 }: { count?: number }) {
 export function ProfileAgentCardSkeleton() {
   return (
     <article className="rounded-2xl border border-white/10 bg-background/35 p-4 sm:p-5" aria-hidden>
-      <motionSafeRow />
+      {motionSafeRow()}
     </article>
   );
 }

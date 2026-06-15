@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
 import { useAiArenaGatewaySession } from "@/hooks/useAiArenaGatewaySession";
 import { useAuth } from "@/contexts/AuthContext";
@@ -47,42 +47,6 @@ export function useMyArenaAgents(page = 1, pageSize = 50) {
         }
         throw new Error("Could not load your AI Arena agents");
       }
-    },
-    enabled: canLoadMine,
-    staleTime: 20_000,
-    retry: 1,
-  });
-}
-
-/** Infinite scroll for the signed-in user's agents (same gateway behavior as {@link useMyArenaAgents}). */
-export function useMyArenaAgentsInfinite(pageSize = 12) {
-  const { isAuthenticated } = useAuth();
-  const { isAiArenaReady } = useAiArenaGatewaySession();
-  const canLoadMine = isAuthenticated && (isAiArenaReady || hasCachedAiArenaIdentity());
-
-  return useInfiniteQuery({
-    queryKey: [...MY_ARENA_AGENTS_QUERY_KEY, "infinite", pageSize],
-    queryFn: async ({ pageParam }: { pageParam: number }) => {
-      try {
-        const data = await aiArenaGatewayApi.getMyAgentsFromMine(pageParam, pageSize);
-        return mergeAgentIntoMineResult(data);
-      } catch {
-        const stored = getStoredAiAgentInfo();
-        if (stored) {
-          return mergeAgentIntoMineResult({ agents: [], mineOk: false }, stored);
-        }
-        throw new Error("Could not load your AI Arena agents");
-      }
-    },
-    initialPageParam: 1,
-    getNextPageParam: (lastPage, allPages, lastPageParam) => {
-      const batch = lastPage.agents.length;
-      if (batch === 0) return undefined;
-      if (batch < pageSize) return undefined;
-      const loaded = allPages.reduce((acc, p) => acc + p.agents.length, 0);
-      const total = lastPage.total;
-      if (typeof total === "number" && total > 0 && loaded >= total) return undefined;
-      return lastPageParam + 1;
     },
     enabled: canLoadMine,
     staleTime: 20_000,

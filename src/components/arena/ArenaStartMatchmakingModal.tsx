@@ -28,7 +28,7 @@ export type ArenaStartMatchmakingModalProps = {
   onOpenChange: (open: boolean) => void;
   agents: AiArenaAgent[];
   defaultAgentId?: string | null;
-  onQueued?: (agentId: string) => void | Promise<void>;
+  onQueued?: (agentId: string, gameId: string) => void | Promise<void>;
 };
 
 function apiErrorMessage(err: unknown, fallback: string) {
@@ -86,7 +86,8 @@ export function ArenaStartMatchmakingModal({
         paymentTxHash: mode === "WAGER" && paymentTxHash.trim() ? paymentTxHash.trim() : undefined,
       });
       toast.success("Your agent is listed — waiting for a challenger.");
-      await onQueued?.(agentId);
+      try { sessionStorage.setItem("arena_queued_game_id", gameId); } catch { /* ignore */ }
+      await onQueued?.(agentId, gameId);
       onOpenChange(false);
     } catch (err) {
       toast.error(apiErrorMessage(err, "Could not start matchmaking"));

@@ -1,15 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-import { playerApi } from "@/api/playerApi";
 import { StorageKeys } from "@/constants/storageKeys";
-import { useAuth } from "@/contexts/AuthContext";
 import { buildCatalogGroundedPrompt } from "@/lib/kultAiGameContext";
 import { streamKultAIReply } from "@/lib/kultAiChat";
-import {
-  formatProfileForChat,
-  isPersonalProfileQuestion,
-  PROFILE_LOGIN_REQUIRED_MESSAGE,
-} from "@/lib/kultAiProfileContext";
 
 export interface KultAIMessage {
   id: string;
@@ -46,7 +39,6 @@ const getErrorMessage = (error: unknown) => {
 };
 
 export const useKultAIChat = () => {
-  const { isAuthenticated, walletAddress } = useAuth();
   const [messages, setMessages] = useState<KultAIMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -94,38 +86,6 @@ export const useKultAIChat = () => {
     setIsStreaming(true);
 
     try {
-      if (isPersonalProfileQuestion(query)) {
-        if (!isAuthenticated || !walletAddress) {
-          setMessages((current) => [
-            ...current,
-            { id: assistantMessageId, role: "ai", text: PROFILE_LOGIN_REQUIRED_MESSAGE },
-          ]);
-          return;
-        }
-
-        let profileAnswer = PROFILE_LOGIN_REQUIRED_MESSAGE;
-
-        try {
-          const profile = await playerApi.getFullProfile();
-          const profileWallet = profile.player.wallet_address;
-          const hasConnectedProfile =
-            profileWallet && profileWallet.toLowerCase() === walletAddress.toLowerCase();
-          profileAnswer = hasConnectedProfile ? formatProfileForChat(profile) : PROFILE_LOGIN_REQUIRED_MESSAGE;
-        } catch {
-          profileAnswer = PROFILE_LOGIN_REQUIRED_MESSAGE;
-        }
-
-        setMessages((current) => [
-          ...current,
-          {
-            id: assistantMessageId,
-            role: "ai",
-            text: profileAnswer,
-          },
-        ]);
-        return;
-      }
-
       const agentMessage = await buildCatalogGroundedPrompt(query);
       const result = await streamKultAIReply({
         message: agentMessage,

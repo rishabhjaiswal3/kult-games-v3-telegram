@@ -1,4 +1,12 @@
-// ─── Player ───────────────────────────────────────────────────────────────────
+export interface ApiEnvelope<T> {
+  ok: boolean;
+  data: T;
+  message?: string;
+}
+
+export type ApiResponse<T> = ApiEnvelope<T>;
+
+// Player
 
 export interface Player {
   _id: string;
@@ -9,19 +17,24 @@ export interface Player {
   updated_at?: string;
 }
 
+export interface PlayerNonceResponse {
+  nonce: string;
+}
+
 export interface LoginRequest {
   walletAddress: string;
-  /** EIP-4361 SIWE message that was signed */
   message: string;
-  /** Hex-encoded secp256k1 signature from personal_sign */
   signature: string;
+  name?: string;
+  metadata?: unknown;
+  referralCode?: string;
 }
 
 export interface PrivyTonLoginRequest {
   walletAddress: string;
   identityToken: string;
   name?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: unknown;
   referralCode?: string;
 }
 
@@ -34,7 +47,6 @@ export interface UpdateNameRequest {
   name: string;
 }
 
-/** Per-game row from GET /player/profile (Rust `PlayerProfile.game_scores_list`). */
 export interface PlayerGameScoreEntry {
   identification: string;
   score: number;
@@ -43,7 +55,6 @@ export interface PlayerGameScoreEntry {
   rank: number | null;
 }
 
-/** Stats object inside `data.profile` for GET /player/profile (kult-browser-backend-rust). */
 export interface PlayerProfileStats {
   walletAddress: string;
   username: string;
@@ -53,15 +64,14 @@ export interface PlayerProfileStats {
   totalGamesPlayed: number;
   completedQuests: number;
   gameScoresList: PlayerGameScoreEntry[];
+  purchasedAssets?: unknown;
 }
 
-/** Full API envelope for GET /player/profile when backend returns `{ cached, profile }`. */
 export interface PlayerProfileApiData {
   cached: boolean;
   profile: PlayerProfileStats;
 }
 
-/** Normalized profile for the profile page (one GET). */
 export interface FullPlayerProfile {
   player: Player;
   cached: boolean;
@@ -71,9 +81,15 @@ export interface FullPlayerProfile {
   totalGamesPlayed: number;
   completedQuests: number;
   gameScoresList: PlayerGameScoreEntry[];
+  purchasedAssets?: unknown;
 }
 
-// ─── Games ────────────────────────────────────────────────────────────────────
+// Games
+
+export interface LocalizedString {
+  en: string;
+  [locale: string]: string;
+}
 
 export interface GameImage {
   url: string;
@@ -98,31 +114,26 @@ export interface GameThumbnail {
   ultrawide?: GameThumbnailVariant | null;
 }
 
-export interface LocalizedString {
-  en: string;
-  [locale: string]: string;
-}
-
 export interface Game {
   _id: string;
   identification?: string;
   slug?: string;
   name: LocalizedString | string;
   description?: LocalizedString | string;
+  about?: string;
   category: string;
   platform?: string[];
   rating?: number;
   image_url?: string;
   images?: GameImage[];
-  thumbnail?: GameThumbnail;
+  thumbnail?: GameThumbnail | null;
   slogan?: string;
-  about?: string;
   url?: string;
-  /** When true, `url` points to an installable/downloadable build (not an in-browser play URL). */
   isDownloadable?: boolean;
   is_downloadable?: boolean;
   is_active?: boolean;
   play_count?: number;
+  knowledge_facts?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -134,9 +145,8 @@ export interface GamesResponse {
   totalPages: number;
 }
 
-// ─── Marketplace (GET /marketplace) ───────────────────────────────────────────
+// Marketplace
 
-/** Single listing — matches kult-browser-backend-rust `ListingResponse` (camelCase JSON). */
 export interface MarketplaceListing {
   id: string;
   name: string;
@@ -148,17 +158,13 @@ export interface MarketplaceListing {
   currency: string;
   gameIdentification: string;
   status: string;
-  /**
-   * Optional backend-provided encoded call payload for direct on-chain purchase.
-   * When present, frontend sends this through Privy sendTransaction.
-   */
+  contractItemId?: string | null;
   purchaseCalldata?: `0x${string}` | null;
-  /** Optional explicit contract override per listing. */
   purchaseContractAddress?: `0x${string}` | null;
-  /** Optional native value in wei for payable purchase. */
   purchaseValueWei?: string | null;
-  /** Optional chain override per listing. */
   purchaseChainId?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface MarketplaceListingsResponse {
@@ -166,26 +172,43 @@ export interface MarketplaceListingsResponse {
   total: number;
   page: number;
   perPage: number;
+  totalPages: number;
+}
+
+export interface MarketplacePrepareOrderRequest {
+  listingId: string;
+  paymentToken: string;
+  quantity?: number;
 }
 
 export interface MarketplaceCreateOrderRequest {
   listingId: string;
+  paymentToken?: string;
   quantity?: number;
   txHash?: string;
 }
 
+export interface MarketplaceCompleteOrderRequest {
+  orderId: string;
+  txHash: string;
+}
+
 export interface MarketplaceOrder {
   id: string;
+  orderId: string;
   listingId: string;
   playerId: string;
+  buyerWallet?: string;
   gameIdentification: string;
+  paymentToken?: string;
   pricePaid: number;
   quantity: number;
   status: string;
   txHash?: string;
+  createdAt?: string;
 }
 
-// ─── Leaderboard ──────────────────────────────────────────────────────────────
+// Leaderboard
 
 export interface LeaderboardEntry {
   rank: number;
@@ -195,6 +218,7 @@ export interface LeaderboardEntry {
   wins?: number;
   level?: string;
   game?: string;
+  metadata?: unknown;
 }
 
 export interface LeaderboardResponse {
@@ -202,13 +226,154 @@ export interface LeaderboardResponse {
   total: number;
   page: number;
   limit: number;
+  totalPages?: number;
   updated_at?: string;
 }
 
-// ─── Generic API response wrapper ─────────────────────────────────────────────
+// Content
 
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  message?: string;
+export interface ContentSectionResponse {
+  content: Record<string, unknown>[];
+  totalContentCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface GetContentParams {
+  page: string;
+  section: string;
+  pageNum?: number;
+  pageSize?: number;
+}
+
+// Moments
+
+export interface Moment {
+  momentId: string;
+  playerWalletAddress: string;
+  assetUrl?: string;
+  assetMetadata?: Record<string, unknown>;
+  assetZgUrl?: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  relatedGames: string[];
+  socialMediaLinks?: Record<string, unknown>;
+  numLikes: number;
+  numComments: number;
+  aiCaption?: string;
+  aiRankScore?: number;
+  aiHighlights: string[];
+  aiStatus?: string;
+  aiMomentType?: string;
+  aiSkillScore?: number;
+  aiReactionQuality?: string;
+  aiRarity?: string;
+  assetZgHash?: string;
+  assetZgTxHash?: string;
+  metadataZgHash?: string;
+  metadataZgTxHash?: string;
+  zgStatus?: string;
+  zgError?: string;
+  zgUploadedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateMomentRequest {
+  assetUrl?: string;
+  assetMetadata?: Record<string, unknown>;
+  title: string;
+  description?: string;
+  tags?: string[];
+  relatedGames?: string[];
+  socialMediaLinks?: Record<string, unknown>;
+}
+
+export interface UpdateMomentRequest {
+  assetUrl?: string;
+  assetMetadata?: Record<string, unknown>;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  relatedGames?: string[];
+  socialMediaLinks?: Record<string, unknown>;
+}
+
+export interface MomentsFeedResponse {
+  moments: Moment[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+export interface MomentMutationResponse {
+  message: string;
+}
+
+export interface CreateMomentResponse extends MomentMutationResponse {
+  momentId: string;
+}
+
+export interface MomentLikeResponse extends MomentMutationResponse {
+  liked: boolean;
+}
+
+export interface MomentDaEvent {
+  momentId: string;
+  eventType: string;
+  payload?: unknown;
+  createdAt?: string;
+}
+
+export interface MomentDaEventsResponse {
+  events: MomentDaEvent[];
+}
+
+export interface MomentZgProofResponse {
+  assetZgHash?: string;
+  assetZgTxHash?: string;
+  metadataZgHash?: string;
+  metadataZgTxHash?: string;
+  zgStatus?: string;
+  zgError?: string;
+  zgUploadedAt?: string;
+  gatewayUrl?: string | null;
+  explorerUrl?: string | null;
+}
+
+// Social media
+
+export interface SubmitSocialPostRequest {
+  platform: string;
+  postUrl: string;
+}
+
+export interface SubmitSocialPostResponse {
+  message: string;
+  postId: string;
+}
+
+export interface SocialPost {
+  id: string;
+  walletAddress: string;
+  platform: string;
+  postId: string;
+  postUrl: string;
+  rawData?: unknown;
+  scrapedAt?: string;
+  validationStatus?: string;
+  createdAt?: string;
+}
+
+export interface SocialPostsResponse {
+  posts: SocialPost[];
+}
+
+// Referral
+
+export interface ReferralInfo {
+  code: string;
+  link: string;
 }

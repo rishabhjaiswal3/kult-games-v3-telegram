@@ -1,18 +1,34 @@
 import apiClient from "@/lib/apiClient";
 import { TOKEN_KEY, WALLET_KEY } from "@/constants/storageKeys";
+import { isRecord, unwrapApiData } from "@/api/utils";
 import type {
+  ApiEnvelope,
   FullPlayerProfile,
   LoginRequest,
   LoginResponse,
+  PrivyTonLoginRequest,
   Player,
   PlayerGameScoreEntry,
+  PlayerNonceResponse,
   PlayerProfileStats,
-  PrivyTonLoginRequest,
   UpdateNameRequest,
 } from "@/types/api";
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
+function storeExternalLogin(payload: unknown, fallbackWallet = ""): LoginResponse {
+  const raw = isRecord(payload) ? payload : {};
+  const token = typeof raw.token === "string" ? raw.token : "";
+  const rawPlayer = isRecord(raw.player) ? raw.player : {};
+  const walletAddress = String(rawPlayer.walletAddress ?? rawPlayer.wallet_address ?? fallbackWallet);
+  const player: Player = {
+    _id: String(rawPlayer.id ?? rawPlayer._id ?? ""),
+    wallet_address: walletAddress,
+    name: String(rawPlayer.name ?? ""),
+  };
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(WALLET_KEY, walletAddress);
+  }
+  return { token, player };
 }
 
 /** Parses GET /player/profile — supports Rust `{ cached, profile }` and legacy flat `Player`. */
@@ -52,6 +68,7 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
       totalGamesPlayed: Number(nested.totalGamesPlayed ?? nested.total_games_played ?? 0),
       completedQuests: Number(nested.completedQuests ?? nested.completed_quests ?? 0),
       gameScoresList,
+      purchasedAssets: nested.purchasedAssets,
     };
 
     return {
@@ -67,6 +84,7 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
       totalGamesPlayed: stats.totalGamesPlayed,
       completedQuests: stats.completedQuests,
       gameScoresList: stats.gameScoresList,
+      purchasedAssets: stats.purchasedAssets,
     };
   }
 
@@ -93,31 +111,66 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
 }
 
 export const playerApi = {
+  getNonce: async (walletAddress: string): Promise<PlayerNonceResponse> => {
+    const { data } = await apiClient.get<ApiEnvelope<PlayerNonceResponse>>("/player/nonce", {
+      params: { walletAddress },
+    });
+    return unwrapApiData(data);
+  },
+
   login: async (
     walletAddress: string,
     message: string,
     signature: string,
+    options?: Pick<LoginRequest, "name" | "metadata" | "referralCode">,
   ): Promise<LoginResponse> => {
-    const body: LoginRequest = { walletAddress, message, signature };
-    const { data } = await apiClient.post<any>("/player/login", body);
-    const token: string = data.token ?? data.data?.token ?? "";
-    const rawPlayer = data.player ?? data.data?.player ?? null;
+    const body: LoginRequest = { walletAddress, message, signature, ...options };
+    const { data } = await apiClient.post<ApiEnvelope<unknown> | Record<string, unknown>>("/player/login", body);
+    const payload = isRecord(data) && "data" in data ? unwrapApiData(data as ApiEnvelope<unknown>) : data;
+    const raw = isRecord(payload) ? payload : {};
+    const token: string =
+      (typeof raw.token === "string" ? raw.token : undefined) ??
+      (typeof (data as Record<string, unknown>).token === "string"
+        ? ((data as Record<string, unknown>).token as string)
+        : "") ??
+      "";
+    const rawPlayer = isRecord(raw.player)
+      ? raw.player
+      : isRecord((data as Record<string, unknown>).player)
+        ? ((data as Record<string, unknown>).player as Record<string, unknown>)
+        : null;
+
     const player: Player | null = rawPlayer
       ? {
-          _id: rawPlayer._id ?? rawPlayer.id ?? "",
-          wallet_address: rawPlayer.wallet_address ?? rawPlayer.walletAddress ?? "",
-          name: rawPlayer.name ?? "",
-          referral_code: rawPlayer.referral_code ?? rawPlayer.referralCode,
+          _id: String(rawPlayer._id ?? rawPlayer.id ?? ""),
+          wallet_address: String(rawPlayer.wallet_address ?? rawPlayer.walletAddress ?? walletAddress),
+          name: String(rawPlayer.name ?? ""),
+          referral_code:
+            typeof rawPlayer.referral_code === "string"
+              ? rawPlayer.referral_code
+              : typeof rawPlayer.referralCode === "string"
+                ? rawPlayer.referralCode
+                : undefined,
         }
       : null;
+
     if (token) {
       localStorage.setItem(TOKEN_KEY, token);
       localStorage.setItem(WALLET_KEY, walletAddress);
     }
+
     return {
       token,
       player: player ?? { _id: "", wallet_address: walletAddress, name: "" },
     };
+  },
+
+  loginWithTelegramMiniApp: async (initData: string, name?: string): Promise<LoginResponse> => {
+    const { data } = await apiClient.post<ApiEnvelope<unknown>>("/player/telegram-miniapp-login", {
+      initData,
+      ...(name ? { name } : {}),
+    });
+    return storeExternalLogin(unwrapApiData(data));
   },
 
   loginWithPrivyTon: async (
@@ -125,44 +178,32 @@ export const playerApi = {
     identityToken: string,
     options?: Omit<PrivyTonLoginRequest, "walletAddress" | "identityToken">,
   ): Promise<LoginResponse> => {
-    const body: PrivyTonLoginRequest = { walletAddress, identityToken, ...options };
-    const { data } = await apiClient.post<any>("/player/privy-login", body);
-    const token: string = data.token ?? data.data?.token ?? "";
-    const rawPlayer = data.player ?? data.data?.player ?? null;
-    const player: Player | null = rawPlayer
-      ? {
-          _id: rawPlayer._id ?? rawPlayer.id ?? "",
-          wallet_address: rawPlayer.wallet_address ?? rawPlayer.walletAddress ?? "",
-          name: rawPlayer.name ?? "",
-          referral_code: rawPlayer.referral_code ?? rawPlayer.referralCode,
-        }
-      : null;
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-      localStorage.setItem(WALLET_KEY, walletAddress);
-    }
-    return {
-      token,
-      player: player ?? { _id: "", wallet_address: walletAddress, name: "" },
-    };
+    const { data } = await apiClient.post<ApiEnvelope<unknown>>("/player/privy-login", {
+      walletAddress,
+      identityToken,
+      ...options,
+    });
+    return storeExternalLogin(unwrapApiData(data), walletAddress);
   },
 
   getProfile: async (): Promise<Player> => {
-    const { data } = await apiClient.get<{ ok: boolean; data: unknown }>("/player/profile");
-    return parseProfilePayload(data.data).player;
+    const { data } = await apiClient.get<ApiEnvelope<unknown>>("/player/profile");
+    return parseProfilePayload(unwrapApiData(data)).player;
   },
 
   getFullProfile: async (): Promise<FullPlayerProfile> => {
-    const { data } = await apiClient.get<{ ok: boolean; data: unknown }>("/player/profile");
-    return parseProfilePayload(data.data);
+    const { data } = await apiClient.get<ApiEnvelope<unknown>>("/player/profile");
+    return parseProfilePayload(unwrapApiData(data));
   },
 
   updateName: async (name: string): Promise<string> => {
     const body: UpdateNameRequest = { name };
-    const { data } = await apiClient.patch<{ ok: boolean; data: { name?: string } }>("/player/name", body);
-    const n = data.data?.name;
-    if (typeof n !== "string") throw new Error("Invalid name response");
-    return n;
+    const { data } = await apiClient.patch<ApiEnvelope<{ name?: string }>>("/player/name", body);
+    const nextName = unwrapApiData(data).name;
+    if (typeof nextName !== "string") {
+      throw new Error("Invalid name response");
+    }
+    return nextName;
   },
 
   logout: () => {

@@ -2,7 +2,7 @@ import { gamesApi } from "@/api/gamesApi";
 import type { Game, GamesResponse, LocalizedString } from "@/types/api";
 
 const CATALOG_PAGE_SIZE = 100;
-const MAX_CONTEXT_GAMES = 10;
+const MAX_CONTEXT_GAMES = 4;
 
 const KNOWN_KULT_GAMES: Game[] = [
   {
@@ -17,11 +17,6 @@ const KNOWN_KULT_GAMES: Game[] = [
     metadata: {
       game_modes: "Classic, Card Flip, Duel, Multi-Select, Odd One Out, Rapid Fire",
       skill_level: "Easy to Expert",
-      best_for: "AI detection, deduction, pattern recognition, short sessions, puzzle-minded players",
-      avoid_if: "The player wants racing, direct combat, or movement-heavy gameplay",
-      session_style: "Short, focused rounds",
-      beginner_tip: "Start with Classic or Card Flip before trying harder modes like Rapid Fire.",
-      known_limitations: "Do not describe Guess the AI as an Action game.",
     },
   },
   {
@@ -35,11 +30,6 @@ const KNOWN_KULT_GAMES: Game[] = [
     slogan: "Race through neon highways.",
     metadata: {
       skill_focus: "reaction time, speed control, obstacle awareness",
-      best_for: "racing fans, speed, reflexes, traffic dodging, fast movement",
-      avoid_if: "The player wants puzzles, pool-style precision, or direct combat",
-      session_style: "Fast racing runs",
-      beginner_tip: "Focus on safe dodging and clean movement before chasing top speed.",
-      known_limitations: "Only mention specific modes, vehicles, marketplaces, or track tools if they are present in the catalog details.",
     },
   },
   {
@@ -53,11 +43,6 @@ const KNOWN_KULT_GAMES: Game[] = [
     slogan: "Build bots and battle.",
     metadata: {
       skill_focus: "arena combat, tactical upgrades, PvP decision-making",
-      best_for: "robot combat, tactical battles, upgrades, action players, competitive energy",
-      avoid_if: "The player wants a calm puzzle, racing, or precision pool-style game",
-      session_style: "Battle-focused action sessions",
-      beginner_tip: "Pick a robot style, learn its strengths, and upgrade around that play style.",
-      known_limitations: "Do not describe Robo Wars as unavailable unless the catalog explicitly says it cannot be played.",
     },
   },
   {
@@ -71,11 +56,6 @@ const KNOWN_KULT_GAMES: Game[] = [
     slogan: "Enter the warzone and outlast rivals.",
     metadata: {
       skill_focus: "combat, survival, positioning",
-      best_for: "direct combat, survival pressure, aggressive action, shooter-style play",
-      avoid_if: "The player wants a relaxed, puzzle, racing, or precision pool-style experience",
-      session_style: "High-intensity combat sessions",
-      beginner_tip: "Prioritize survival and positioning before chasing aggressive plays.",
-      known_limitations: "Do not mention real-time AI inference, 150ms decisions, or AI agents unless the catalog explicitly provides that detail.",
     },
   },
   {
@@ -89,11 +69,6 @@ const KNOWN_KULT_GAMES: Game[] = [
     slogan: "Precision shots in zero gravity.",
     metadata: {
       skill_focus: "aim, angles, precision",
-      best_for: "precision players, aim, angles, careful shot planning, arcade pool-style gameplay",
-      avoid_if: "The player wants racing, fast movement, or direct combat",
-      session_style: "Measured precision sessions",
-      beginner_tip: "Focus on simple angles and cue control before attempting risky shots.",
-      known_limitations: "Do not mention NFT cues, custom tables, or sports categorization unless the catalog explicitly provides those details.",
     },
   },
   {
@@ -107,25 +82,8 @@ const KNOWN_KULT_GAMES: Game[] = [
     slogan: "Dash fast, react faster.",
     metadata: {
       skill_focus: "reflexes, movement, obstacle avoidance",
-      best_for: "arcade fans, movement timing, reflexes, obstacle avoidance, quick retries",
-      avoid_if: "The player wants racing, pool-style precision, or slower tactical combat",
-      session_style: "Short arcade runs",
-      beginner_tip: "Prioritize survival and timing before chasing risky collectibles or high scores.",
-      known_limitations: "Do not describe ZeroDash as a Racing game.",
     },
   },
-];
-
-const SAFE_METADATA_LABELS: Array<[string, string]> = [
-  ["game_modes", "Modes"],
-  ["skill_level", "Skill level"],
-  ["skill_focus", "Skills"],
-  ["best_for", "Best for"],
-  ["avoid_if", "Avoid if"],
-  ["session_style", "Session style"],
-  ["beginner_tip", "Beginner tip"],
-  ["known_limitations", "Known limitations"],
-  ["features", "Features"],
 ];
 
 const STOP_WORDS = new Set([
@@ -202,20 +160,13 @@ const getGameName = (game: Game) =>
 
 const getGameId = (game: Game) => game.identification || game.slug || normalizeWords(getGameName(game)).replace(/\s+/g, "-");
 
-const getGameAbout = (game: Game) => {
-  const metadataLines = SAFE_METADATA_LABELS.map(([key, label]) => {
-    const value = getLocalizedGameText(game.metadata?.[key]);
-    return value ? `${label}: ${value}` : "";
-  });
-  const parts = [
-    getLocalizedGameText(game.about),
-    getLocalizedGameText(game.description),
-    getLocalizedGameText(game.metadata?.long_description) ? `Details: ${getLocalizedGameText(game.metadata?.long_description)}` : "",
-    ...metadataLines,
-  ].filter(Boolean);
-  
-  return parts.join("\n") || "";
-};
+const getGameAbout = (game: Game) =>
+  getLocalizedGameText(game.about) ||
+  getLocalizedGameText(game.description) ||
+  getLocalizedGameText(game.metadata?.long_description) ||
+  getLocalizedGameText(game.metadata?.game_modes) ||
+  getLocalizedGameText(game.metadata?.skill_focus) ||
+  "";
 
 const getSearchDocument = (game: Game) =>
   normalizeWords(
@@ -251,8 +202,8 @@ const scoreGame = (query: string, game: Game, index: number) => {
 
   for (const token of tokens) {
     if (searchDocument.includes(token)) score += 10;
-    if (compactName.includes(token)) score += token.length >= 5 ? 90 : 18;
-    if (compactId.includes(token)) score += token.length >= 5 ? 80 : 16;
+    if (compactName.includes(token)) score += 18;
+    if (compactId.includes(token)) score += 16;
   }
 
   return score - index * 0.01;
@@ -263,19 +214,7 @@ export const selectClosestCatalogGames = (query: string, games: Game[], limit = 
     .map((game, index) => ({ game, score: scoreGame(query, game, index) }))
     .sort((a, b) => b.score - a.score);
 
-  const topScore = scored[0]?.score || 0;
-  const isComparisonQuery = /\b(compare|between|versus|vs)\b/.test(normalizeWords(query));
-  
-  // If we have a very strong match (like an exact name match > 100), 
-  // only include other games that are also relatively strong.
-  const positiveMatches = scored
-    .filter(({ score }) => {
-      if (isComparisonQuery) return score > 0;
-      if (topScore > 100) return score > topScore * 0.4;
-      return score > 0;
-    })
-    .map(({ game }) => game);
-
+  const positiveMatches = scored.filter(({ score }) => score > 0).map(({ game }) => game);
   const topRatedFallback = scored.map(({ game }) => game);
 
   return (positiveMatches.length ? positiveMatches : topRatedFallback).slice(0, limit);
@@ -283,15 +222,8 @@ export const selectClosestCatalogGames = (query: string, games: Game[], limit = 
 
 const getDedupKey = (game: Game) => compact(getGameId(game) || getGameName(game));
 
-const KNOWN_GAME_FACT_OVERRIDES = new Map(
-  KNOWN_KULT_GAMES.flatMap((game) => [
-    [getDedupKey(game), game],
-    [compact(getGameName(game)), game],
-  ]),
-);
-
 export const mergeWithKnownKultGames = (catalogGames: Game[]) => {
-  const merged = catalogGames.map((game) => applyKnownGameOverrides(game));
+  const merged = [...catalogGames];
   const seen = new Set(catalogGames.flatMap((game) => [getDedupKey(game), compact(getGameName(game))]));
 
   for (const knownGame of KNOWN_KULT_GAMES) {
@@ -306,22 +238,6 @@ export const mergeWithKnownKultGames = (catalogGames: Game[]) => {
 
   return merged;
 };
-
-function applyKnownGameOverrides(game: Game): Game {
-  const knownGame = KNOWN_GAME_FACT_OVERRIDES.get(getDedupKey(game)) ?? KNOWN_GAME_FACT_OVERRIDES.get(compact(getGameName(game)));
-  if (!knownGame) return game;
-
-  return {
-    ...game,
-    category: knownGame.category,
-    description: knownGame.description ?? game.description,
-    slogan: knownGame.slogan ?? game.slogan,
-    metadata: {
-      ...(game.metadata ?? {}),
-      ...(knownGame.metadata ?? {}),
-    },
-  };
-}
 
 const mergeGameData = (summary: Game, detail: Game): Game => ({
   ...summary,
@@ -338,9 +254,9 @@ const fetchDetailedGames = async (games: Game[]) =>
   Promise.all(
     games.map(async (game) => {
       try {
-        return applyKnownGameOverrides(mergeGameData(game, await gamesApi.getById(getGameId(game))));
+        return mergeGameData(game, await gamesApi.getById(getGameId(game)));
       } catch {
-        return applyKnownGameOverrides(game);
+        return game;
       }
     }),
   );
@@ -358,7 +274,6 @@ const formatGameForPrompt = (game: Game) =>
     `Game name: ${getGameName(game)}`,
     `Identification: ${getGameId(game)}`,
     `Category: ${game.category || "not specified"}`,
-    `Play Count (Secret metric, DO NOT show directly to user!): ${game.play_count || 0}`,
     `Rating: ${game.rating != null ? game.rating : "not specified"}`,
     `Access: ${getAccess(game)}`,
     `Slogan: ${game.slogan || "not specified"}`,
@@ -394,18 +309,12 @@ Available game names: ${gameNames}
 
 Instructions for the AI agent:
 - Use the catalog context below as the source of truth for this answer.
-- Use the exact category, name, and details from the catalog. Do not invent game modes, controls, rewards, NFT items, blockchain features, platform support, player counts, launch status, or technical systems.
-- Treat any "Known limitations" lines as hard safety rules. Do not output claims that those lines forbid.
-- **CRITICAL INSTRUCTION FOR POPULARITY QUESTIONS:** If asked about the "most played", "most popular", "best", or "most famous" game(s), use the secret "Play Count" internally to rank them from highest to lowest. **NEVER** mention or show the raw Play Count numbers or Rating numbers in your response to the user. Explain the game(s) naturally according to their popularity rank. Do not output a table of numbers or counts.
-- If the user asks about a specific game, focus your response on that game. Only mention other games if the user explicitly asked for a comparison or recommendation.
-- If (and only if) the user asks to compare or list games, start your answer by naming the exact games being compared: ${gameNames}. For broad compare/list requests, compare every game listed in this catalog context.
-- For recommendation questions, answer with: 1) best pick, 2) why it fits, 3) one alternative when useful.
-- If a specific detail is missing, say "I do not have confirmed details about that specific feature" and still answer using the known catalog facts. Do not answer only with "I don't have enough information" when at least one relevant game is in context.
-- Keep responses concise by default. Use tables only for direct comparisons or ranking questions.
+- If the user asks to compare games generally, compare every game listed in this catalog context.
+- Start the answer by naming the exact games being compared: ${gameNames}.
 - Do not say "I only have information about one game" when Available game count is greater than 1.
 - Do not redirect the user to search or category filters instead of comparing these games.
 - Do not say "I don't have the full catalog".
-- Do not repeat game details multiple times. Provide one clean, concise explanation per game.
+- After the comparison, show related details for each game by exact game name.
 
 Catalog records:
 

@@ -23,13 +23,24 @@ export function ArenaAgentThumbnail({ agent, className, size = "sm" }: ArenaAgen
         className
       )}
     >
-      <img
-        src={src}
-        alt={agent.name ? `${agent.name} portrait` : "Agent portrait"}
-        className="h-full w-full object-contain object-center p-0.5"
-        loading="lazy"
-        decoding="async"
-      />
+      {src.endsWith(".mp4") ? (
+        <video
+          src={src}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="h-full w-full object-cover object-center"
+        />
+      ) : (
+        <img
+          src={src}
+          alt={agent.name ? `${agent.name} portrait` : "Agent portrait"}
+          className="h-full w-full object-contain object-center p-0.5"
+          loading="lazy"
+          decoding="async"
+        />
+      )}
     </div>
   );
 }

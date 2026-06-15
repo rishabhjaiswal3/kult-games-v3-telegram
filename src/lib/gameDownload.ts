@@ -1,10 +1,21 @@
 import type { Game } from "@/types/api";
 
 export function isGameDownloadable(game: Game): boolean {
-  const enabled = game.isDownloadable === true || game.is_downloadable === true;
-  return enabled && Boolean((game.url ?? "").trim());
+  return game.isDownloadable === true || game.is_downloadable === true;
 }
 
 export function gameDownloadUrl(game: Game): string {
-  return (game.url ?? "").trim();
+  const metadata = game.metadata ?? {};
+  const metadataUrl =
+    typeof metadata.download_url === "string"
+      ? metadata.download_url
+      : typeof metadata.downloadUrl === "string"
+        ? metadata.downloadUrl
+        : "";
+
+  return (metadataUrl || game.url || "").trim();
+}
+
+export function hasGameDownloadUrl(game: Game): boolean {
+  return Boolean(gameDownloadUrl(game));
 }

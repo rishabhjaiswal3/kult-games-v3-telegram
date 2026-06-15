@@ -3,14 +3,11 @@ import { MOMENTS_IFRAME_URL } from "@/lib/momentsUrl";
 import { useAuth } from "@/contexts/AuthContext";
 import { TOKEN_KEY, WALLET_KEY } from "@/constants/storageKeys";
 
-/**
- * Full-viewport embed of the Moments web app (URL from `VITE_MOMENTS_URL`).
- * Passes the parent JWT to the iframe via postMessage so the moments app
- * can make authenticated API calls without its own login flow.
- */
-const MomentsPage = () => {
+const IFRAME_SRC = `${MOMENTS_IFRAME_URL}/moments?embed=1`;
+
+export function MomentsPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const { isAuthenticated, player } = useAuth();
+  const { player } = useAuth();
 
   const sendAuthToIframe = useCallback(() => {
     const iframe = iframeRef.current;
@@ -26,29 +23,27 @@ const MomentsPage = () => {
           ? { token, player: { walletAddress, name: player?.name ?? null } }
           : null,
       },
-      MOMENTS_IFRAME_URL
+      MOMENTS_IFRAME_URL,
     );
-  }, [isAuthenticated, player]);
+  }, [player]);
 
-  // Re-send whenever auth state changes
   useEffect(() => {
     sendAuthToIframe();
   }, [sendAuthToIframe]);
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="flex h-[calc(100vh-64px)] w-full flex-col">
       <iframe
         ref={iframeRef}
-        title="Moments"
-        src={MOMENTS_IFRAME_URL}
+        src={IFRAME_SRC}
         onLoad={sendAuthToIframe}
-        className="fixed left-0 w-full border-0 bg-background z-0"
-        style={{ top: "4rem", height: "calc(100dvh - 4rem)" }}
-        allow="clipboard-read; clipboard-write; fullscreen"
-        referrerPolicy="strict-origin-when-cross-origin"
+        title="Kult Moments"
+        className="h-full w-full border-0"
+        allow="clipboard-write; autoplay"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox"
       />
     </div>
   );
-};
+}
 
 export default MomentsPage;

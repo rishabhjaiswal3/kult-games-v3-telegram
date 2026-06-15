@@ -3,43 +3,47 @@ import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
 import type { AiArenaLeaderboardEntry } from "@/types/aiArenaGateway";
 import { AI_ARENA_LEADERBOARD_LIMIT, AI_ARENA_LEADERBOARD_QUERY_KEY } from "@/hooks/useAiArenaGlobalLeaderboard";
 
-async function enrichEntries(entries: AiArenaLeaderboardEntry[]): Promise<AiArenaLeaderboardEntry[]> {
-  const top = entries.slice(0, 25);
-  const enriched = await Promise.all(
-    top.map(async (entry) => {
-      if (entry.name) return entry;
-      try {
-        const agent = await aiArenaGatewayApi.getAgentById(entry.agentId);
-        return {
-          ...entry,
-          name: agent.name,
-          clan: agent.clan,
-          eloRating: agent.eloRating ?? entry.score,
-          wins: agent.wins,
-          archetype: agent.archetype,
-        };
-      } catch {
-        return {
-          ...entry,
-          name: `Agent ${entry.agentId.slice(0, 6)}`,
-          eloRating: entry.score,
-        };
-      }
-    })
-  );
-  return [...enriched, ...entries.slice(25)];
+/**
+ * The leaderboard backend now returns pre-enriched data (name, clan, archetype,
+ * wins, losses, draws) in a single call — no per-agent lookups needed.
+ * We keep a lightweight fallback in case older backend versions return bare entries.
+ */
+function normalizeEntries(entries: AiArenaLeaderboardEntry[]): AiArenaLeaderboardEntry[] {
+  return entries.map((e) => ({
+    ...e,
+    name:      e.name      ?? `Agent ${e.agentId.slice(0, 8)}`,
+    eloRating: e.eloRating ?? e.score,
+    wins:      e.wins      ?? 0,
+    losses:    e.losses    ?? 0,
+    draws:     e.draws     ?? 0,
+  }));
 }
 
-export function useEnrichedArenaLeaderboard(enabled = true) {
+type UseEnrichedArenaLeaderboardOptions = {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+  staleTime?: number;
+};
+
+export function useEnrichedArenaLeaderboard(options: boolean | UseEnrichedArenaLeaderboardOptions = true) {
+  const normalized =
+    typeof options === "boolean"
+      ? { enabled: options, refetchInterval: false, staleTime: 5 * 60_000 }
+      : {
+          enabled: options.enabled ?? true,
+          refetchInterval: options.refetchInterval ?? false,
+          staleTime: options.staleTime ?? 5 * 60_000,
+        };
+
   return useQuery({
     queryKey: [...AI_ARENA_LEADERBOARD_QUERY_KEY, "enriched"],
     queryFn: async () => {
       const data = await aiArenaGatewayApi.getGlobalLeaderboard(AI_ARENA_LEADERBOARD_LIMIT);
-      const entries = await enrichEntries(data.entries ?? []);
-      return { entries };
+      return { entries: normalizeEntries(data.entries ?? []) };
     },
-    enabled,
-    staleTime: 5 * 60_000,
+    enabled: normalized.enabled,
+    staleTime: normalized.staleTime,
+    refetchInterval: normalized.refetchInterval,
     retry: 1,
   });
 }

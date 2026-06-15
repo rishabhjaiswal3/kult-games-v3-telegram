@@ -4,23 +4,30 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CreateAgentProvider } from "@/contexts/CreateAgentContext";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { useState, useCallback, useEffect, useRef } from "react";
 import gsap from "gsap";
 import Index from "./pages/Index";
-import Store from "./pages/Store";
-import Marketplace from "./pages/Marketplace";
+import Games from "./pages/Games";
+import Inventory from "./pages/Inventory";
+import MyAgentsPage from "./pages/MyAgentsPage";
+import TrainingPage from "./pages/TrainingPage";
+import BattlesPage from "./pages/BattlesPage";
 import Leaderboard from "./pages/Leaderboard";
-import Events from "./pages/Events";
 import GameDetail from "./pages/GameDetail";
 import GamePlay from "./pages/GamePlay";
 import NotFound from "./pages/NotFound";
 import AIArenaPage from "./pages/AIArenaPage";
 import MomentsPage from "./pages/MomentsPage";
-import ProfilePage from "./pages/ProfilePage";
+import Dashboard from "./pages/Dashboard";
+import AutonomousPage from "./pages/AutonomousPage";
+import AchievementsPage from "./pages/AchievementsPage";
+import ArenaGamePage from "./pages/ArenaGamePage";
+import RobowarGamePage from "./pages/RobowarGamePage";
 import LoadingScreen from "./components/LoadingScreen";
+import { LoginModalHost } from "@/components/LoginModalHost";
 import KultAIFloating from "./components/KultAIFloating";
-import Navbar from "@/components/Navbar";
+import { AppShell } from "@/layout/AppShell";
 import { gamesApi } from "@/api/gamesApi";
 
 const SPLASH_SEEN_KEY = "kult_splash_seen";
@@ -48,13 +55,6 @@ const queryClient = new QueryClient({
 const FADED_CONTENT_DELAY = 350;
 /** Keep preview subtle — avoid `filter: blur` on the whole app (hurts scroll compositing & text clarity). */
 const PREVIEW_OPACITY = 0.35;
-
-const AppHeader = () => {
-  const location = useLocation();
-  const hideOnRoute = location.pathname.endsWith("/play");
-  if (hideOnRoute) return null;
-  return <Navbar />;
-};
 
 const App = () => {
   const [loaded, setLoaded] = useState(readSplashAlreadySeen);
@@ -145,21 +145,32 @@ const App = () => {
             className={loaded ? "" : "pointer-events-none"}
             style={loaded ? { opacity: 1 } : { opacity: 0 }}
           >
-            <AppHeader />
             <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/games" element={<Store />} />
-              <Route path="/marketplace" element={<Marketplace />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/events" element={<Events />} />
-              <Route path="/ai-arena" element={<AIArenaPage />} />
-              <Route path="/moments" element={<MomentsPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/game/:id" element={<GameDetail />} />
-              <Route path="/game/:id/play" element={<GamePlay />} />
+              <Route element={<AppShell />}>
+                <Route path="/" element={<Index />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/games" element={<Games />} />
+                <Route path="/my-agents" element={<MyAgentsPage />} />
+                <Route path="/training" element={<TrainingPage />} />
+                <Route path="/battles" element={<BattlesPage />} />
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/marketplace" element={<Navigate to="/inventory" replace />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/ai-arena" element={<AIArenaPage />} />
+                <Route path="/moments" element={<MomentsPage />} />
+                <Route path="/autonomous" element={<AutonomousPage />} />
+                <Route path="/achievements" element={<AchievementsPage />} />
+                <Route path="/game/:id" element={<GameDetail />} />
+                <Route path="/game/:id/play" element={<GamePlay />} />
+              </Route>
+              {/* Full-screen arena game page — no AppShell sidebar */}
+              <Route path="/arena/game/:battleId" element={<ArenaGamePage />} />
+              {/* Robowar simulation page — red theme, no Unity, 120s sim */}
+              <Route path="/arena/robowar/:battleId" element={<RobowarGamePage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
+          <LoginModalHost />
           {loaded && <KultAIFloating />}
         </BrowserRouter>
       </TooltipProvider>

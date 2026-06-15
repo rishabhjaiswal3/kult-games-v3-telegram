@@ -1,4 +1,4 @@
-import { MAIN_BACKEND } from "@/lib/serviceUrls";
+import { playerApi } from "@/api/playerApi";
 import { getAllowedChainFromEnv } from "@/lib/chain";
 
 export function buildSiweMessage(address: string, nonce: string): string {
@@ -21,12 +21,9 @@ export function buildSiweMessage(address: string, nonce: string): string {
 }
 
 export async function fetchSiweNonce(walletAddress: string): Promise<string> {
-  const res = await fetch(
-    `${MAIN_BACKEND}/player/nonce?walletAddress=${encodeURIComponent(walletAddress)}`
-  );
-  if (!res.ok) throw new Error(`Failed to fetch nonce: ${res.status}`);
-  const json = await res.json();
-  const nonce: unknown = json?.data?.nonce ?? json?.nonce;
-  if (typeof nonce !== "string" || !nonce) throw new Error("Invalid nonce response");
+  const { nonce } = await playerApi.getNonce(walletAddress);
+  if (typeof nonce !== "string" || !nonce) {
+    throw new Error("Invalid nonce response");
+  }
   return nonce;
 }

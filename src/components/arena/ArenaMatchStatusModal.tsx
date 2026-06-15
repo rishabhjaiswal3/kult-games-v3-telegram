@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Radio, Search, Swords, UserMinus } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AI_ARENA_DEFAULT_GAME_ID } from "@/constants/aiArenaMatchmaking";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
 import { ArenaAgentThumbnail } from "@/components/arena/ArenaAgentThumbnail";
@@ -43,6 +43,7 @@ type ArenaMatchStatusModalProps = {
     opponent: AiArenaAgent;
     battleId: string;
     mode: string;
+    gameId: string;
   }) => void;
 };
 
@@ -103,17 +104,23 @@ export function ArenaMatchStatusModal({
 }: ArenaMatchStatusModalProps) {
   const agentId = agent?.id ?? null;
 
+  // Capture gameId the moment it appears in status or battle — survives queue-clear polling resets.
+  const resolvedGameIdRef = useRef<string>("default");
+  // Guard: fire onMatchFound only once per battleId to prevent double-navigation.
+  const matchFiredRef = useRef<string | null>(null);
+
   const statusQ = useQuery({
     queryKey: ["aiArenaGateway", "matchStatusModal", agentId],
     queryFn: () => aiArenaGatewayApi.getMatchmakingStatus(agentId!),
     enabled: open && !!agentId,
     refetchInterval: (query) => {
-      const matchId = query.state.data?.status?.matchId;
-      const inQueue = query.state.data?.status?.inQueue;
-      if (!open || !inQueue) return false;
-      return matchId ? 6_000 : 3_000;
+      if (!open) return false;
+      const s = query.state.data?.status;
+      // Keep polling while searching OR while matched-but-battle-not-yet-loaded
+      if (s?.inQueue) return 2_000;
+      return false;
     },
-    staleTime: 2_000,
+    staleTime: 1_000,
     retry: 1,
   });
 
@@ -125,7 +132,14 @@ export function ArenaMatchStatusModal({
     queryKey: ["aiArenaGateway", "matchStatusModalBattle", battleId],
     queryFn: () => aiArenaGatewayApi.getBattle(battleId!),
     enabled: open && !!battleId && !!agentId,
-    staleTime: 5_000,
+    // Poll every 2s while PENDING so we catch the IN_PROGRESS transition
+    refetchInterval: (query) => {
+      if (!open || !battleId) return false;
+      const s = query.state.data?.battle?.status;
+      if (!s || s === "PENDING" || s === "INITIALIZING") return 2_000;
+      return false;
+    },
+    staleTime: 1_000,
     retry: 1,
   });
 
@@ -139,15 +153,27 @@ export function ArenaMatchStatusModal({
     retry: 1,
   });
 
+  // Latch gameId as soon as it arrives — don't lose it when polling resets status.
+  useEffect(() => {
+    if (status?.gameId) resolvedGameIdRef.current = status.gameId;
+  }, [status?.gameId]);
+  useEffect(() => {
+    if (battleQ.data?.battle?.gameId) resolvedGameIdRef.current = battleQ.data.battle.gameId;
+  }, [battleQ.data?.battle?.gameId]);
+
+  // Fire once per battleId — prevent double-navigation when status/battle re-poll after queue clears.
   useEffect(() => {
     if (!open || !agent || !battleId || !opponentQ.data) return;
+    if (matchFiredRef.current === battleId) return;
+    matchFiredRef.current = battleId;
     onMatchFound?.({
       agent,
       opponent: opponentQ.data,
       battleId,
-      mode: status?.mode ?? battleQ.data?.battle?.mode ?? "RANKED",
+      mode:   status?.mode ?? battleQ.data?.battle?.mode ?? "RANKED",
+      gameId: resolvedGameIdRef.current,
     });
-  }, [open, agent, battleId, opponentQ.data, onMatchFound, status?.mode, battleQ.data?.battle?.mode]);
+  }, [open, agent, battleId, opponentQ.data, onMatchFound]);
 
   if (!agent) return null;
 
@@ -186,12 +212,26 @@ export function ArenaMatchStatusModal({
           ) : null}
 
           {phase === "matched" && opponentQ.data ? (
-            <ArenaMatchFaceoff
-              left={agent}
-              right={opponentQ.data}
-              battleId={battleId}
-              mode={status?.mode ?? battleQ.data?.battle?.mode ?? "RANKED"}
-            />
+            <>
+              <ArenaMatchFaceoff
+                left={agent}
+                right={opponentQ.data}
+                battleId={battleId}
+                mode={status?.mode ?? battleQ.data?.battle?.mode ?? "RANKED"}
+                pending={!battleQ.data?.battle?.status || battleQ.data.battle.status === "PENDING" || battleQ.data.battle.status === "INITIALIZING"}
+              />
+              {battleQ.data?.battle?.status === "IN_PROGRESS" ? (
+                <div className="flex items-center justify-center gap-2 rounded-xl border border-neon-green/25 bg-neon-green/10 px-4 py-3 text-sm font-semibold text-neon-green">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-neon-green" />
+                  Battle is live — track it in the Battle Lookup below
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 rounded-xl border border-neon-cyan/20 bg-neon-cyan/8 px-4 py-3 text-sm text-neon-cyan/80">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Starting battle — both agents entering the arena…
+                </div>
+              )}
+            </>
           ) : null}
 
           {phase === "matched" && !opponentQ.data && !opponentQ.isError ? (

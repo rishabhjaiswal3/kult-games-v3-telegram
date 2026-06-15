@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { saveTrackedAiArenaBattleId } from "@/lib/arenaBattleStorage";
 
 type ArenaLiveMatchContextValue = {
   activeBattleId: string | null;
@@ -9,7 +10,16 @@ const ArenaLiveMatchContext = createContext<ArenaLiveMatchContextValue | null>(n
 
 export function ArenaLiveMatchProvider({ children }: { children: ReactNode }) {
   const [activeBattleId, setActiveBattleId] = useState<string | null>(null);
-  const value = useMemo(() => ({ activeBattleId, setActiveBattleId }), [activeBattleId]);
+  const value = useMemo(
+    () => ({
+      activeBattleId,
+      setActiveBattleId: (id: string | null) => {
+        setActiveBattleId(id);
+        saveTrackedAiArenaBattleId(id);
+      },
+    }),
+    [activeBattleId]
+  );
   return <ArenaLiveMatchContext.Provider value={value}>{children}</ArenaLiveMatchContext.Provider>;
 }
 

@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function ArenaLiveDuelFeedSkeleton() {
   return (
     <div className="glass-panel rounded-2xl p-5" aria-busy="true" aria-label="Loading live arena feed">
-      <motionSafeRow />
+      {motionSafeRow()}
     </div>
   );
 }

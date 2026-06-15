@@ -7,8 +7,9 @@ export default defineConfig(({ mode }) => ({
   define: {
     global: "globalThis",
   },
+  assetsInclude: ['**/*.MOV'],
   optimizeDeps: {
-    include: ["buffer"],
+    include: ["buffer", "@privy-io/react-auth"],
   },
   server: {
     host: "::",

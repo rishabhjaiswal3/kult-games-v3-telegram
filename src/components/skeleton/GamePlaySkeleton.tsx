@@ -2,15 +2,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function GamePlaySkeleton() {
   return (
-    <div className="flex h-screen w-screen flex-col bg-background" aria-busy="true" aria-label="Loading game">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-background/90 px-4 py-3 backdrop-blur-sm">
-        <Skeleton className="h-9 w-24 rounded-lg bg-muted/70" />
-        <Skeleton className="h-5 w-40 bg-muted/80" />
-        <Skeleton className="ml-auto h-9 w-28 rounded-lg bg-muted/65" />
+    <div className="relative min-h-0 flex-1 overflow-hidden bg-black" aria-busy="true" aria-label="Loading game">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-24 bg-gradient-to-b from-black/55 to-transparent" />
+      <div className="absolute left-0 top-0 z-20">
+        <Skeleton className="h-8 w-8 rounded-none rounded-br-[14px] bg-muted/65" />
       </div>
-      <div className="relative min-h-0 flex-1 p-4">
-        <Skeleton className="h-full w-full rounded-xl bg-muted/45" />
-      </div>
+      <Skeleton className="h-full w-full bg-muted/45" />
     </div>
   );
 }

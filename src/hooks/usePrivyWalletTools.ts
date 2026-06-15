@@ -4,6 +4,9 @@ import { getAllowedChainFromEnv } from "@/lib/chain";
 
 type WalletLike = {
   address?: string;
+  getEthereumProvider?: () => Promise<{
+    request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  }>;
   switchChain?: (chainId: number) => Promise<unknown>;
 };
 

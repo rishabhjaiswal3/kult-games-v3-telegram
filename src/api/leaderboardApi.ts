@@ -1,57 +1,58 @@
 import apiClient from "@/lib/apiClient";
-import type { LeaderboardEntry, LeaderboardResponse } from "@/types/api";
+import { isRecord, pickNumber, pickString, unwrapApiData } from "@/api/utils";
+import type { ApiEnvelope, LeaderboardEntry, LeaderboardResponse } from "@/types/api";
 
-interface ApiEnvelope<T> {
-  ok: boolean;
-  data: T;
-}
-
-function normalizeLeaderboardEntry(raw: Record<string, unknown>, index: number): LeaderboardEntry {
-  const wallet =
-    (typeof raw.wallet_address === "string" && raw.wallet_address) ||
-    (typeof raw.walletAddress === "string" && raw.walletAddress) ||
-    "";
+function normalizeLeaderboardEntry(rawValue: unknown, index: number): LeaderboardEntry {
+  const raw = isRecord(rawValue) ? rawValue : {};
+  const wallet = pickString(raw.wallet_address, raw.walletAddress, raw.player) ?? "";
 
   return {
-    rank: Number(raw.rank ?? index + 1),
+    rank: pickNumber(raw.rank) ?? index + 1,
     wallet_address: wallet,
-    name: typeof raw.name === "string" ? raw.name : typeof raw.username === "string" ? raw.username : undefined,
-    score: Number(raw.score ?? 0),
-    wins: raw.wins != null ? Number(raw.wins) : undefined,
-    level: raw.level != null ? String(raw.level) : undefined,
-    game: typeof raw.game === "string" ? raw.game : undefined,
+    name: pickString(raw.name, raw.username),
+    score: pickNumber(raw.score) ?? 0,
+    wins: pickNumber(raw.wins),
+    level:
+      raw.level == null
+        ? undefined
+        : typeof raw.level === "string"
+          ? raw.level
+          : String(raw.level),
+    game: pickString(raw.game, raw.identification),
+    metadata: raw.metadata,
   };
 }
 
-function normalizeLeaderboardResponse(data: unknown): LeaderboardResponse {
-  const raw = (data ?? {}) as Record<string, unknown>;
+function normalizeLeaderboardResponse(payload: unknown, fallbackPage: number, fallbackPageSize: number): LeaderboardResponse {
+  const raw = isRecord(payload) ? payload : {};
   const entriesRaw = Array.isArray(raw.entries) ? raw.entries : [];
-  const entries = entriesRaw.map((row, i) =>
-    normalizeLeaderboardEntry(row as Record<string, unknown>, i)
-  );
+  const entries = entriesRaw.map((entry, index) => normalizeLeaderboardEntry(entry, index));
+  const total = pickNumber(raw.total, raw.totalCount, raw.count) ?? entries.length;
+  const limit = pickNumber(raw.limit, raw.pageSize, raw.page_size, raw.perPage) ?? fallbackPageSize;
 
   return {
     entries,
-    total: Number(raw.total ?? raw.totalCount ?? entries.length),
-    page: Number(raw.page ?? 1),
-    limit: Number(raw.limit ?? raw.pageSize ?? entries.length),
-    updated_at: typeof raw.updated_at === "string" ? raw.updated_at : undefined,
+    total,
+    page: pickNumber(raw.page) ?? fallbackPage,
+    limit,
+    totalPages: pickNumber(raw.totalPages) ?? (total === 0 ? 0 : Math.ceil(total / limit)),
+    updated_at: pickString(raw.updated_at, raw.updatedAt),
   };
 }
 
 export const leaderboardApi = {
   getGlobal: async (page = 1, limit = 50): Promise<LeaderboardResponse> => {
     const { data } = await apiClient.get<ApiEnvelope<unknown>>("/leaderboard/global", {
-      params: { page, limit },
+      params: { page, page_size: limit, limit },
     });
-    return normalizeLeaderboardResponse(data.data);
+    return normalizeLeaderboardResponse(unwrapApiData(data), page, limit);
   },
 
   getByGame: async (gameId: string, page = 1, limit = 50): Promise<LeaderboardResponse> => {
     const { data } = await apiClient.get<ApiEnvelope<unknown>>(`/leaderboard/game/${gameId}`, {
-      params: { page, limit },
+      params: { page, page_size: limit, limit },
     });
-    return normalizeLeaderboardResponse(data.data);
+    return normalizeLeaderboardResponse(unwrapApiData(data), page, limit);
   },
 
   refresh: async (): Promise<void> => {

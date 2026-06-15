@@ -64,6 +64,77 @@ function attachAiArenaRefreshOn401(client: AxiosInstance) {
 }
 
 /**
+ * x402 automatic payment interceptor.
+ *
+ * When the gateway returns 402 Payment Required, this interceptor:
+ *   1. Reads the payment requirements from the response body
+ *   2. Gets the current agent ID from local storage
+ *   3. POSTs to /v1/financial/escrow/x402/pay to deduct from the agent's
+ *      custodial ARENA wallet and receive a synthetic tx hash
+ *   4. Retries the original request with X-Payment-Tx-Hash + X-Payment-Agent-Id headers
+ *
+ * Only retries once (_x402Retry flag) to prevent infinite loops.
+ */
+function attachX402AutoPay(client: AxiosInstance) {
+  client.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const status   = error?.response?.status;
+      const original = error?.config as (typeof error.config & { _x402Retry?: boolean }) | undefined;
+
+      if (status !== 402 || !original || original._x402Retry) {
+        return Promise.reject(error);
+      }
+
+      const payment = error.response?.data?.payment as {
+        amount?: number;
+        action?: string;
+        currency?: string;
+      } | undefined;
+
+      if (!payment?.amount || !payment?.action) return Promise.reject(error);
+
+      // Get stored agent ID
+      const { getStoredAiAgentInfo } = await import("@/lib/aiAgentStorage");
+      const agentInfo = getStoredAiAgentInfo();
+      if (!agentInfo?.agentId) {
+        console.warn("[x402] No agent ID in storage — cannot auto-pay");
+        return Promise.reject(error);
+      }
+
+      original._x402Retry = true;
+
+      try {
+        // Pay from agent's custodial wallet
+        const payRes = await client.post<{ ok: boolean; txHash: string; agentId: string }>(
+          "/v1/financial/escrow/x402/pay",
+          { agentId: agentInfo.agentId, amount: payment.amount, purpose: payment.action }
+        );
+
+        if (!payRes.data?.ok || !payRes.data?.txHash) {
+          console.warn("[x402] Payment initiation returned no txHash");
+          return Promise.reject(error);
+        }
+
+        const { txHash } = payRes.data;
+        console.info(`[x402] Auto-paid ${payment.amount} ARENA for ${payment.action} → tx ${txHash}`);
+
+        // Retry with payment proof headers
+        original.headers = {
+          ...(original.headers ?? {}),
+          "X-Payment-Tx-Hash":  txHash,
+          "X-Payment-Agent-Id": agentInfo.agentId,
+        };
+        return client.request(original);
+      } catch (payErr) {
+        console.warn("[x402] Auto-pay failed:", payErr);
+        return Promise.reject(error); // surface original 402
+      }
+    }
+  );
+}
+
+/**
  * Only the main backend uses shared session storage for login; clearing tokens on 401
  * matches existing player/games behavior. Other services get their own client without this.
  */
@@ -95,6 +166,7 @@ function buildClient(service: ApiServiceId): AxiosInstance {
   }
   if (service === "aiArenaGateway") {
     attachAiArenaRefreshOn401(instance);
+    attachX402AutoPay(instance);
   }
 
   return instance;

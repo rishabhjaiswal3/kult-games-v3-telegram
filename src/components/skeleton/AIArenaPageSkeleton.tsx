@@ -16,7 +16,7 @@ function GlassBlock({ className, children }: { className?: string; children?: Re
 export function AIArenaPageSkeleton() {
   return (
     <main
-      className="relative z-10 mx-auto max-w-[1600px] space-y-6 px-4 pb-12 pt-[calc(4rem+env(safe-area-inset-top,0px))] sm:px-6 md:px-8 md:pb-16 lg:space-y-8 lg:pb-20"
+      className="relative z-10 mx-auto max-w-full space-y-6 px-4 pb-12 pt-[calc(4rem+env(safe-area-inset-top,0px))] sm:px-6 md:px-8 md:pb-16 lg:space-y-8 lg:pb-20"
       aria-busy="true"
       aria-label="Loading AI Arena"
     >

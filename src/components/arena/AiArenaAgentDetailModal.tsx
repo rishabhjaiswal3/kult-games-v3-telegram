@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Copy, Loader2 } from "lucide-react";
+import {
+  Copy, Database, Loader2, Shield, Swords, TrendingUp,
+  Zap, Brain, Activity, ExternalLink, Trophy, Clock, MessageSquare,
+} from "lucide-react";
 import { toast } from "sonner";
 import { aiArenaGatewayApi } from "@/api/aiArenaGatewayApi";
-import type { AiArenaAgent, AiArenaLeaderboardEntry } from "@/types/aiArenaGateway";
+import type { AiArenaAgent } from "@/types/aiArenaGateway";
 import { Dialog } from "@/components/ui/dialog";
 import {
   ArenaDialogBody,
@@ -11,228 +14,478 @@ import {
   ArenaDialogHeader,
   ArenaDialogTitle,
 } from "@/components/ui/arena-dialog";
-import { Button } from "@/components/ui/button";
+import { ClanIcon } from "@/components/arena/ClanIcon";
 
-export type AiArenaAgentDetailSeed = Partial<AiArenaAgent> & {
-  rank?: number;
-};
+// ── helpers ──────────────────────────────────────────────────────────────────
 
-export type AiArenaAgentDetailModalProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  agentId: string | null;
-  seed?: AiArenaAgentDetailSeed | AiArenaLeaderboardEntry | null;
-};
-
-function isAxiosLike(e: unknown): e is { response?: { status?: number; data?: { error?: string } } } {
-  return typeof e === "object" && e !== null;
+function clanType(agent: AiArenaAgent): "zerog" | "solana" | "base" {
+  const c = agent.clan?.toUpperCase();
+  if (c === "SOLANA") return "solana";
+  if (c === "BASE") return "base";
+  return "zerog";
 }
 
-export function AiArenaAgentDetailModal({ open, onOpenChange, agentId, seed }: AiArenaAgentDetailModalProps) {
-  const enabled = Boolean(open && agentId);
+function clanLabel(clan?: string) {
+  const n = clan?.trim().toUpperCase();
+  if (n === "SOLANA") return "Solana";
+  if (n === "BASE") return "Base";
+  if (n === "ZEROG" || n === "0G") return "ZeroG";
+  return clan?.trim() || "AI Arena";
+}
 
-  const agentQ = useQuery({
-    queryKey: ["aiArenaGateway", "agentDetail", agentId],
-    queryFn: () => aiArenaGatewayApi.getAgentById(agentId!),
-    enabled,
-    retry: false,
-  });
+function winRate(agent: AiArenaAgent) {
+  const total = agent.wins + agent.losses + (agent.draws ?? 0);
+  return total ? ((agent.wins / total) * 100).toFixed(1) : "0.0";
+}
 
-  const walletQ = useQuery({
-    queryKey: ["aiArenaGateway", "agentDetailWallet", agentId],
-    queryFn: () => aiArenaGatewayApi.getAgentWalletBalance(agentId!),
-    enabled,
-    retry: false,
-  });
+function shortHash(hash: string) {
+  return `${hash.slice(0, 10)}…`;
+}
 
-  const evolutionQ = useQuery({
-    queryKey: ["aiArenaGateway", "agentDetailEvolution", agentId],
-    queryFn: () => aiArenaGatewayApi.getAgentEvolution(agentId!),
-    enabled,
-    retry: false,
-  });
+async function copyText(label: string, value: string) {
+  await navigator.clipboard.writeText(value);
+  toast.success(`${label} copied`);
+}
 
-  const rankQ = useQuery({
-    queryKey: ["aiArenaGateway", "agentDetailRank", agentId],
-    queryFn: () => aiArenaGatewayApi.getLeaderboardRankForAgent(agentId!),
-    enabled,
-    retry: false,
-  });
+function TraitBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[10px]">
+        <span className="capitalize text-white/60">{label}</span>
+        <span className="font-mono font-bold text-white/80">{value}</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/5">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-[#9a35ff] to-[#00d4ff]"
+          style={{ width: `${Math.min(100, value)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
-  const profile = agentQ.data;
-  const seedObj = seed as AiArenaLeaderboardEntry | AiArenaAgentDetailSeed | null | undefined;
-
-  const displayName =
-    profile?.name ??
-    ("name" in (seedObj ?? {}) ? (seedObj as AiArenaLeaderboardEntry).name : undefined) ??
-    (seedObj && "name" in seedObj ? (seedObj as AiArenaAgent).name : undefined) ??
-    "Agent";
-
-  const displayClan =
-    profile?.clan ??
-    ("clan" in (seedObj ?? {}) ? (seedObj as AiArenaLeaderboardEntry).clan : undefined) ??
-    (seedObj && "clan" in seedObj ? (seedObj as AiArenaAgent).clan : undefined) ??
-    "—";
-
-  const displayElo =
-    profile?.eloRating ??
-    ("eloRating" in (seedObj ?? {}) ? (seedObj as AiArenaLeaderboardEntry).eloRating : undefined) ??
-    (seedObj && "eloRating" in seedObj ? (seedObj as AiArenaAgent).eloRating : undefined);
-
-  const displayWins =
-    profile?.wins ??
-    ("wins" in (seedObj ?? {}) ? (seedObj as AiArenaLeaderboardEntry).wins : undefined) ??
-    (seedObj && "wins" in seedObj ? (seedObj as AiArenaAgent).wins : undefined);
-
-  const displayRank =
-    rankQ.data?.rank ??
-    ("rank" in (seedObj ?? {}) ? (seedObj as AiArenaLeaderboardEntry).rank : undefined) ??
-    (seedObj && "rank" in seedObj ? (seedObj as AiArenaAgentDetailSeed).rank : undefined);
-
-  const copyText = async (label: string, value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`${label} copied`);
-    } catch {
-      toast.error("Could not copy");
-    }
+function StatChip({
+  icon: Icon,
+  label,
+  value,
+  color = "purple",
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  color?: "purple" | "cyan" | "emerald" | "amber";
+}) {
+  const colors = {
+    purple: "border-purple-500/20 bg-purple-500/8 text-purple-300",
+    cyan:   "border-cyan-500/20   bg-cyan-500/8   text-cyan-300",
+    emerald:"border-emerald-500/20 bg-emerald-500/8 text-emerald-300",
+    amber:  "border-amber-500/20  bg-amber-500/8  text-amber-300",
   };
+  return (
+    <div className={`flex flex-col items-center gap-1 rounded-lg border p-3 ${colors[color]}`}>
+      <Icon className="h-4 w-4 opacity-70" />
+      <span className="font-tech text-[9px] font-bold uppercase tracking-wider opacity-60">{label}</span>
+      <span className="font-tech text-sm font-bold">{value}</span>
+    </div>
+  );
+}
 
-  const walletErr =
-    walletQ.isError && isAxiosLike(walletQ.error)
-      ? String(walletQ.error.response?.data?.error ?? walletQ.error)
-      : walletQ.isError
-        ? "Wallet unavailable"
-        : null;
+// ── main component ────────────────────────────────────────────────────────────
+
+export interface AiArenaAgentDetailModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  agent: AiArenaAgent | null;
+}
+
+export function AiArenaAgentDetailModal({ open, onOpenChange, agent }: AiArenaAgentDetailModalProps) {
+  // Live agent profile (richer data)
+  const profileQ = useQuery({
+    queryKey: ["arena-agent-profile", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getAgentById(agent!.id),
+    enabled: open && !!agent?.id,
+    staleTime: 30_000,
+  });
+
+  // Evolution data
+  const evolutionQ = useQuery({
+    queryKey: ["arena-agent-evolution", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getAgentEvolution(agent!.id),
+    enabled: open && !!agent?.id,
+    staleTime: 30_000,
+  });
+
+  // Training jobs for this agent
+  const trainingQ = useQuery({
+    queryKey: ["arena-agent-training", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getAgentTrainingJobs(agent!.id),
+    enabled: open && !!agent?.id,
+    staleTime: 30_000,
+  });
+
+  // Wallet balance
+  const walletQ = useQuery({
+    queryKey: ["arena-agent-wallet", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getAgentWalletBalance(agent!.id),
+    enabled: open && !!agent?.id,
+    staleTime: 30_000,
+  });
+
+  // Leaderboard rank for this agent
+  const leaderboardQ = useQuery({
+    queryKey: ["arena-leaderboard-rank", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getLeaderboardRankForAgent(agent!.id),
+    enabled: open && !!agent?.id,
+    staleTime: 60_000,
+  });
+
+  // Battle memories (0G Storage archives)
+  const memoriesQ = useQuery({
+    queryKey: ["arena-agent-memories", agent?.id],
+    queryFn: () => aiArenaGatewayApi.getAgentMemories(agent!.id, 1, 10),
+    enabled: open && !!agent?.id,
+    staleTime: 60_000,
+  });
+
+  if (!agent) return null;
+
+  const profile     = profileQ.data?.agent ?? agent;
+  const traits      = (profile.traits as Record<string, number>) ?? {};
+  const traitKeys   = Object.keys(traits);
+  const meta        = profile.metadata as Record<string, unknown> | null | undefined;
+  const metadataHash  = (profile.metadataRootHash ?? meta?.metadataRootHash) as string | null | undefined;
+  const avatarHash    = (profile.avatarRootHash   ?? meta?.avatarRootHash)   as string | null | undefined;
+  const inftTokenId   = profile.inftTokenId;
+
+  const activeTrainingJobs = (trainingQ.data ?? []).filter(
+    (j) => j.status === "RUNNING" || j.status === "QUEUED"
+  );
+  const completedJobs = (trainingQ.data ?? []).filter((j) => j.status === "COMPLETED");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <ArenaDialogContent size="lg">
+      <ArenaDialogContent size="xl">
+        {/* Header */}
         <ArenaDialogHeader>
-          <ArenaDialogTitle className="font-display text-left text-xl sm:text-2xl">{displayName}</ArenaDialogTitle>
-          <ArenaDialogDescription className="text-left text-xs sm:text-sm">
-            Agent ID: <span className="font-mono text-neon-cyan/90">{agentId ?? "—"}</span>
-          </ArenaDialogDescription>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#9a35ff]/30 bg-[#9a35ff]/10">
+              <Brain className="h-5 w-5 text-[#9a35ff]" />
+            </div>
+            <div className="min-w-0">
+              <ArenaDialogTitle className="truncate font-tech text-base font-bold uppercase tracking-wide text-white">
+                {profile.name}
+              </ArenaDialogTitle>
+              <ArenaDialogDescription className="flex items-center gap-2 text-[10px] text-white/40">
+                <ClanIcon type={clanType(profile)} className="h-3 w-3" />
+                <span>{clanLabel(profile.clan)} · {profile.archetype} · {profile.evolutionStage}</span>
+              </ArenaDialogDescription>
+            </div>
+            {profileQ.isFetching && <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-white/30" />}
+          </div>
         </ArenaDialogHeader>
 
-        <ArenaDialogBody>
-          <div className="space-y-5 pr-1">
-            {agentQ.isLoading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading agent profile…
+        <ArenaDialogBody className="space-y-5">
+
+          {/* ── Stats grid ──────────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatChip icon={TrendingUp} label="ELO" value={profile.eloRating.toLocaleString()} color="purple" />
+            <StatChip icon={Swords}     label="Win Rate" value={`${winRate(profile)}%`} color="cyan" />
+            <StatChip icon={Shield}     label="Battles" value={(profile.wins + profile.losses + (profile.draws ?? 0)).toLocaleString()} color="emerald" />
+            <StatChip
+              icon={Trophy}
+              label="Rank"
+              value={leaderboardQ.data?.rank ? `#${leaderboardQ.data.rank}` : leaderboardQ.isLoading ? "…" : "—"}
+              color="amber"
+            />
+          </div>
+
+          {/* ── Battle record ─────────────────────────────────────────── */}
+          <section className="rounded-xl border border-white/8 bg-[#04080f]/60 p-4">
+            <h4 className="mb-3 font-tech text-[10px] font-bold uppercase tracking-wider text-white/50">Battle Record</h4>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="font-tech text-xl font-bold text-emerald-400">{profile.wins}</div>
+                <div className="font-tech text-[9px] uppercase text-white/30">Wins</div>
               </div>
-            )}
+              <div>
+                <div className="font-tech text-xl font-bold text-rose-400">{profile.losses}</div>
+                <div className="font-tech text-[9px] uppercase text-white/30">Losses</div>
+              </div>
+              <div>
+                <div className="font-tech text-xl font-bold text-amber-400">{profile.draws ?? 0}</div>
+                <div className="font-tech text-[9px] uppercase text-white/30">Draws</div>
+              </div>
+            </div>
+          </section>
 
-            {agentQ.isError && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100/90">
-                We could not load the full profile right now. Showing the summary we have below.
-              </p>
-            )}
-
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Rank" value={displayRank != null ? `#${displayRank}` : "—"} />
-              <Stat label="ELO" value={displayElo != null ? String(displayElo) : "—"} />
-              <Stat label="Wins" value={displayWins != null ? String(displayWins) : "—"} />
-              <Stat label="Clan" value={String(displayClan)} />
+          {/* ── Traits ───────────────────────────────────────────────── */}
+          {traitKeys.length > 0 && (
+            <section className="rounded-xl border border-white/8 bg-[#04080f]/60 p-4">
+              <h4 className="mb-3 font-tech text-[10px] font-bold uppercase tracking-wider text-white/50">Traits</h4>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {traitKeys.map((k) => (
+                  <TraitBar key={k} label={k} value={Number(traits[k])} />
+                ))}
+              </div>
             </section>
+          )}
 
-            {profile && (
-              <section className="space-y-2 rounded-xl border border-white/10 bg-background/40 p-4 text-sm">
-                <DetailRow label="Archetype" value={profile.archetype ?? "—"} />
-                <DetailRow label="Stage" value={profile.evolutionStage ?? "—"} />
-                <DetailRow label="Losses" value={profile.losses != null ? String(profile.losses) : "—"} />
-                <DetailRow label="Arena NFT" value={profile.inftTokenId ?? "Pending mint"} />
-                {profile.createdAt ? (
-                  <DetailRow label="Created" value={new Date(profile.createdAt).toLocaleString()} />
-                ) : null}
-              </section>
-            )}
-
-            {profile?.traits && (
-              <section className="rounded-xl border border-white/10 bg-background/40 p-4">
-                <h4 className="mb-2 font-display text-xs font-bold tracking-wider text-neon-purple">Traits</h4>
-                <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
-                  {Object.entries(profile.traits).map(([k, v]) => (
-                    <li key={k} className="flex justify-between gap-2 font-mono text-[11px] text-muted-foreground">
-                      <span className="truncate capitalize">{k}</span>
-                      <span className="text-foreground">{v}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {evolutionQ.isSuccess && (
-              <section className="rounded-xl border border-neon-cyan/20 bg-neon-cyan/5 p-4 text-xs">
-                <h4 className="mb-2 font-display text-[11px] font-bold tracking-wider text-neon-cyan">Evolution</h4>
-                <p className="text-muted-foreground">
-                  Stage <span className="text-foreground">{evolutionQ.data.stage}</span> → next{" "}
-                  <span className="text-foreground">{evolutionQ.data.nextStage}</span>. Wins required:{" "}
-                  {evolutionQ.data.winsRequired}, to go: {evolutionQ.data.winsToGo}. Eligible:{" "}
-                  {evolutionQ.data.eligible ? "yes" : "no"}
-                </p>
-              </section>
-            )}
-
-            <section className="rounded-xl border border-white/10 bg-background/40 p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h4 className="font-display text-xs font-bold tracking-wider text-neon-cyan">Custodial wallet</h4>
-                {walletQ.isFetching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+          {/* ── Evolution ────────────────────────────────────────────── */}
+          {evolutionQ.data && (
+            <section className="rounded-xl border border-white/8 bg-[#04080f]/60 p-4">
+              <h4 className="mb-2 font-tech text-[10px] font-bold uppercase tracking-wider text-white/50">Evolution</h4>
+              <div className="flex flex-wrap gap-4 text-[11px]">
+                <span className="text-white/40">Stage <span className="font-bold text-white">{evolutionQ.data.currentStage}</span></span>
+                <span className="text-white/40">Battles <span className="font-bold text-white">{evolutionQ.data.totalBattles}</span></span>
+                <span className="text-white/40">ELO <span className="font-bold text-white">{evolutionQ.data.eloRating}</span></span>
+                <span className={`font-bold ${evolutionQ.data.eligibleForEvolution ? "text-emerald-400" : "text-white/30"}`}>
+                  {evolutionQ.data.eligibleForEvolution ? "✓ Evolution Ready" : "Not eligible yet"}
+                </span>
               </div>
-              {walletQ.isSuccess ? (
-                <div className="space-y-3 text-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="break-all font-mono text-[11px] text-foreground">
-                      {walletQ.data.wallet.solanaAddress}
+            </section>
+          )}
+
+          {/* ── Training ─────────────────────────────────────────────── */}
+          <section className="rounded-xl border border-white/8 bg-[#04080f]/60 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-tech text-[10px] font-bold uppercase tracking-wider text-white/50">Training</h4>
+              {trainingQ.isFetching && <Loader2 className="h-3 w-3 animate-spin text-white/30" />}
+            </div>
+            {trainingQ.isLoading ? (
+              <div className="text-[11px] text-white/30">Loading…</div>
+            ) : (trainingQ.data ?? []).length === 0 ? (
+              <div className="text-[11px] text-white/30">No training jobs found.</div>
+            ) : (
+              <div className="space-y-2">
+                {activeTrainingJobs.length > 0 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/8 px-3 py-2">
+                    <Activity className="h-3.5 w-3.5 animate-pulse text-sky-400" />
+                    <span className="font-tech text-[10px] font-bold text-sky-300">
+                      {activeTrainingJobs.length} active job{activeTrainingJobs.length > 1 ? "s" : ""} running
                     </span>
-                    <Button
+                  </div>
+                )}
+                {(trainingQ.data ?? []).slice(0, 4).map((job) => (
+                  <div key={job.id} className="flex items-center justify-between rounded border border-white/5 bg-white/2 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-3 w-3 text-purple-400/60" />
+                      <span className="text-[10px] text-white/70">{job.type?.replace(/_/g, " ") ?? "Training"}</span>
+                    </div>
+                    <span className={`font-tech text-[9px] font-bold uppercase ${
+                      job.status === "COMPLETED" ? "text-emerald-400" :
+                      job.status === "RUNNING"   ? "text-sky-400" :
+                      job.status === "FAILED"    ? "text-rose-400" : "text-amber-400"
+                    }`}>{job.status}</span>
+                  </div>
+                ))}
+                {completedJobs.length > 0 && (
+                  <div className="pt-1 text-right text-[9px] text-white/25">
+                    {completedJobs.length} completed session{completedJobs.length > 1 ? "s" : ""}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ── 0G Storage ───────────────────────────────────────────── */}
+          {(metadataHash || avatarHash || inftTokenId) && (
+            <section className="rounded-xl border border-[#9a35ff]/25 bg-[#9a35ff]/5 p-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Database className="h-3.5 w-3.5 text-[#9a35ff]" />
+                <h4 className="font-tech text-[10px] font-bold uppercase tracking-wider text-[#9a35ff]">0G Storage & Chain</h4>
+              </div>
+              <div className="space-y-2.5 text-[11px]">
+                {inftTokenId && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-white/40">INFT Token</span>
+                    <span className="font-mono font-bold text-emerald-400">#{inftTokenId}</span>
+                    <a
+                      href={`https://chainscan.0g.ai/token/0xf39310130EA1d8ca76e84A5A90D24f8Bd4f1656F?a=${inftTokenId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[10px] text-[#9a35ff]/60 underline transition hover:text-[#9a35ff]"
+                    >
+                      view on 0G Chain <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                )}
+                {metadataHash && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-white/40">Metadata root hash</span>
+                    <button
                       type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 shrink-0 gap-1 px-2 text-[10px]"
+                      className="flex items-center gap-1 font-mono text-[#00d4ff]/80 transition hover:text-[#00d4ff]"
+                      onClick={() => void copyText("Metadata root hash", metadataHash)}
+                    >
+                      <span>{shortHash(metadataHash)}</span>
+                      <Copy className="h-2.5 w-2.5 shrink-0" />
+                    </button>
+                    <a
+                      href={`https://storagescan.0g.ai/tx/${metadataHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[10px] text-[#9a35ff]/60 underline transition hover:text-[#9a35ff]"
+                    >
+                      view on 0G scan <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                )}
+                {avatarHash && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-white/40">Avatar root hash</span>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 font-mono text-[#00d4ff]/80 transition hover:text-[#00d4ff]"
+                      onClick={() => void copyText("Avatar root hash", avatarHash)}
+                    >
+                      <span>{shortHash(avatarHash)}</span>
+                      <Copy className="h-2.5 w-2.5 shrink-0" />
+                    </button>
+                    <a
+                      href={`https://storagescan.0g.ai/tx/${avatarHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-[10px] text-[#9a35ff]/60 underline transition hover:text-[#9a35ff]"
+                    >
+                      view on 0G scan <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                )}
+                <p className="text-[10px] text-white/25">
+                  Agent metadata and avatar are permanently stored on 0G Storage Network.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {/* ── Battle Memories (0G Storage) ────────────────────────── */}
+          <section className="rounded-xl border border-[#00d4ff]/20 bg-[#00d4ff]/5 p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-3.5 w-3.5 text-[#00d4ff]" />
+                <h4 className="font-tech text-[10px] font-bold uppercase tracking-wider text-[#00d4ff]">
+                  Battle Memories
+                </h4>
+                {memoriesQ.data?.total != null && (
+                  <span className="rounded-full border border-[#00d4ff]/25 bg-[#00d4ff]/10 px-1.5 py-0.5 font-mono text-[8px] text-[#00d4ff]/70">
+                    {memoriesQ.data.total}
+                  </span>
+                )}
+              </div>
+              {memoriesQ.isFetching && <Loader2 className="h-3 w-3 animate-spin text-white/25" />}
+            </div>
+
+            {memoriesQ.isLoading ? (
+              <div className="text-[11px] text-white/30">Loading memories…</div>
+            ) : (memoriesQ.data?.memories ?? []).length === 0 ? (
+              <div className="space-y-1">
+                <div className="text-[11px] text-white/30">No battle memories yet.</div>
+                <div className="text-[10px] text-white/20">
+                  Complete a match to generate AI commentary and store it permanently on 0G Storage.
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {(memoriesQ.data?.memories ?? []).map((mem) => {
+                  const isWin  = mem.metadata?.outcome === "WIN";
+                  const isLoss = mem.metadata?.outcome === "LOSS";
+                  const bid    = mem.metadata?.battleId as string | undefined;
+                  return (
+                    <div
+                      key={mem.id}
+                      className="rounded-lg border border-white/5 bg-[#04080f]/60 p-3 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`font-tech text-[8px] font-bold uppercase tracking-wider ${
+                            isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-white/40"
+                          }`}
+                        >
+                          {isWin ? "✓ WIN" : isLoss ? "✗ LOSS" : mem.metadata?.outcome ?? mem.type}
+                        </span>
+                        <span className="font-mono text-[8px] text-white/20">
+                          {new Date(mem.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="font-mono text-[10px] italic leading-relaxed text-white/55">
+                        "{mem.content.length > 180 ? `${mem.content.slice(0, 180)}…` : mem.content}"
+                      </p>
+                      {bid && (
+                        <div className="flex items-center gap-1 text-[8px] text-white/20">
+                          <span>Battle:</span>
+                          <span className="font-mono">{bid.slice(0, 8)}…{bid.slice(-4)}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {(memoriesQ.data?.total ?? 0) > 10 && (
+                  <p className="text-right font-mono text-[9px] text-white/25">
+                    Showing 10 of {memoriesQ.data?.total} memories · stored on 0G Storage
+                  </p>
+                )}
+              </div>
+            )}
+            <p className="mt-2 text-[9px] text-white/20">
+              AI-generated commentary archived permanently on 0G decentralised storage.
+            </p>
+          </section>
+
+          {/* ── Wallet ───────────────────────────────────────────────── */}
+          {walletQ.data?.wallet && (
+            <section className="rounded-xl border border-white/8 bg-[#04080f]/60 p-4">
+              <h4 className="mb-3 font-tech text-[10px] font-bold uppercase tracking-wider text-white/50">Custodial Wallet</h4>
+              <div className="space-y-2 text-[11px]">
+                {walletQ.data.wallet.solanaAddress && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="shrink-0 text-white/40">Solana</span>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 break-all font-mono text-white/70 transition hover:text-white"
                       onClick={() => void copyText("Solana address", walletQ.data.wallet.solanaAddress)}
                     >
-                      <Copy className="h-3 w-3" />
-                      Copy
-                    </Button>
+                      {walletQ.data.wallet.solanaAddress.slice(0, 20)}…
+                      <Copy className="h-2.5 w-2.5 shrink-0" />
+                    </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    <Stat label="$ARENA" value={String(walletQ.data.wallet.balanceArena ?? 0)} />
-                    <Stat label="SOL" value={String(walletQ.data.wallet.balanceSol ?? 0)} />
-                    <Stat label="Frozen" value={walletQ.data.wallet.isFrozen ? "Yes" : "No"} />
+                )}
+                <div className="flex flex-wrap gap-4 pt-1">
+                  <div>
+                    <div className="font-tech text-[9px] uppercase text-white/30">ARENA Balance</div>
+                    <div className="font-tech text-sm font-bold text-purple-300">{walletQ.data.wallet.balanceArena.toLocaleString()} ARENA</div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    This wallet powers deposits, rewards, and withdrawals for the agent.
-                  </p>
+                  <div>
+                    <div className="font-tech text-[9px] uppercase text-white/30">SOL Balance</div>
+                    <div className="font-tech text-sm font-bold text-cyan-300">{walletQ.data.wallet.balanceSol} SOL</div>
+                  </div>
+                  {walletQ.data.wallet.isFrozen && (
+                    <div className="flex items-center gap-1 text-[10px] text-rose-400">
+                      <Shield className="h-3 w-3" /> Wallet frozen
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  {walletErr ?? "Wallet details appear once your session has access to this agent."}
-                </p>
-              )}
+              </div>
             </section>
+          )}
+
+          {/* ── Agent ID ─────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between rounded-lg border border-white/5 bg-white/2 px-4 py-2.5">
+            <div className="flex items-center gap-2 text-[10px] text-white/30">
+              <Clock className="h-3 w-3" />
+              <span>Created {profile.createdAt ? new Date(profile.createdAt).toLocaleDateString() : "—"}</span>
+            </div>
+            <button
+              type="button"
+              className="flex items-center gap-1 font-mono text-[10px] text-white/30 transition hover:text-white/60"
+              onClick={() => void copyText("Agent ID", profile.id)}
+            >
+              {profile.id.slice(0, 8)}…
+              <Copy className="h-2.5 w-2.5" />
+            </button>
           </div>
+
         </ArenaDialogBody>
       </ArenaDialogContent>
     </Dialog>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-background/30 px-3 py-2">
-      <div className="text-[9px] font-display tracking-widest text-muted-foreground">{label}</div>
-      <div className="truncate font-mono text-sm font-semibold text-foreground">{value}</div>
-    </div>
-  );
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-white/5 py-1 last:border-0">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium text-foreground">{value}</span>
-    </div>
   );
 }
