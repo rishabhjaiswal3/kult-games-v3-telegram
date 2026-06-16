@@ -156,13 +156,11 @@ function AgentLoadingCard({
   const color = agent ? clanColor(agent.clan) : "#8b6dff";
 
   return (
-    <div className="flex flex-col items-center gap-3" style={{ width: 180 }}>
+    <div className="flex w-[124px] flex-col items-center gap-3 sm:w-[180px]">
       {/* Portrait frame */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-white/20"
+        className="relative h-[152px] w-[124px] overflow-hidden rounded-2xl border border-white/20 sm:h-[220px] sm:w-[180px]"
         style={{
-          width: 180,
-          height: 220,
           boxShadow: `0 0 48px ${color}55, 0 12px 40px rgba(0,0,0,0.7)`,
         }}
       >
@@ -459,7 +457,7 @@ function UnityLoadingScreen({
       />
 
       {/* ── Content ── */}
-      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-8 px-6">
+      <div className="relative z-10 flex h-full flex-col items-center justify-center gap-8 px-3 sm:px-6">
 
         {/* Title */}
         <div className="text-center">
@@ -472,7 +470,7 @@ function UnityLoadingScreen({
         </div>
 
         {/* Agent cards + VS */}
-        <div className="flex items-center gap-10 sm:gap-16">
+        <div className="flex items-center gap-2 sm:gap-16">
 
           {/* My agent */}
           <AgentLoadingCard agent={myAgent} side="left" />
@@ -547,8 +545,8 @@ function AgentCard({
 
   if (!agent) {
     return (
-      <div className="flex flex-1 items-center gap-3 px-2 sm:px-4">
-        <div className="h-14 w-14 sm:h-16 sm:w-16 animate-pulse rounded-xl bg-white/5" />
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-2 sm:px-4">
+        <div className="h-12 w-12 shrink-0 sm:h-16 sm:w-16 animate-pulse rounded-xl bg-white/5" />
         <div className="space-y-1.5">
           <div className="h-3 w-24 animate-pulse rounded bg-white/8" />
           <div className="h-2 w-16 animate-pulse rounded bg-white/5" />
@@ -566,7 +564,7 @@ function AgentCard({
         />
         <ArenaAgentThumbnail
           agent={agent}
-          className="relative h-14 w-14 sm:h-16 sm:w-16 rounded-xl border-white/15"
+          className="relative h-12 w-12 sm:h-16 sm:w-16 rounded-xl border-white/15"
         />
         {isWinner && (
           <Crown
@@ -617,7 +615,7 @@ function AgentCard({
 
   return (
     <div
-      className={`flex flex-1 items-center gap-2 sm:gap-3 px-2 sm:px-4 transition-all duration-500 ${
+      className={`flex min-w-0 flex-1 items-center gap-2 sm:gap-3 px-2 sm:px-4 transition-all duration-500 ${
         isLoser ? "opacity-40 grayscale" : ""
       } ${isRight ? "flex-row-reverse" : ""}`}
     >
@@ -950,7 +948,7 @@ function GameChatPanel({
   };
 
   return (
-    <div className="flex w-[280px] sm:w-[300px] lg:w-[320px] shrink-0 flex-col border-l border-white/8 bg-[#04080f]/90">
+    <div className="flex h-[38vh] min-h-0 w-full flex-none flex-col border-t border-white/8 bg-[#04080f]/90 lg:h-auto lg:w-[320px] lg:border-l lg:border-t-0">
       <div className="flex items-center gap-2 border-b border-white/8 px-3 py-2.5">
         <MessageSquare className="h-3.5 w-3.5 text-primary/70" />
         <span className="font-tech text-[10px] uppercase tracking-widest text-white/60 font-bold">
@@ -1881,11 +1879,11 @@ export default function ArenaGamePage() {
         mode={mode}
       />
 
-      {/* ── Main: Canvas + Chat ───────────────────────────────────────────── */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* ── Main: Canvas + Chat (stacked on mobile, side-by-side on desktop) ── */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
 
-        {/* Canvas area */}
-        <div className="relative min-h-0 flex-1 bg-[#040810] overflow-hidden">
+        {/* Canvas area — fills most of the height on mobile, remaining space on desktop */}
+        <div className="relative min-h-0 w-full flex-1 bg-[#040810] overflow-hidden lg:w-auto lg:flex-1">
 
           {/* Error state — centred */}
           {isError && (
@@ -1939,7 +1937,7 @@ export default function ArenaGamePage() {
                 id="unity-canvas"
                 width={1280}
                 height={720}
-                style={{ width: "100%", height: "100%", display: "block", background: "#030710" }}
+                style={{ width: "100%", height: "100%", display: "block", objectFit: "cover", background: "#030710" }}
               />
 
               {/* React loading screen (shown until Unity finishes loading) */}

@@ -9,6 +9,7 @@ import { isMomentsPath } from "@/constants/moments";
 import { navLabelForPath } from "@/layout/navConfig";
 import { usesArenaLayout } from "@/layout/arenaRoutes";
 import { cn } from "@/lib/utils";
+import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
 
 export type AppShellOutletContext = {
   isGameChromeVisible: boolean;
@@ -29,6 +30,7 @@ export function AppShell() {
   const isAchievements = pathname === "/achievements";
   const isLeague = pathname === "/league";
   const isGamePlay = /^\/game\/[^/]+\/play$/.test(pathname);
+  const isTelegram = isTelegramMiniApp();
 
   useEffect(() => {
     if (!isGamePlay) {
@@ -50,7 +52,12 @@ export function AppShell() {
   );
 
   return (
-    <div className="arena-app-shell h-dvh min-h-0 overflow-hidden bg-[#03070d] text-white">
+    <div
+      className={cn(
+        "arena-app-shell h-dvh min-h-0 overflow-hidden bg-[#03070d] text-white",
+        isTelegram && "telegram-app-shell"
+      )}
+    >
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_12%,rgba(139,37,255,0.18),transparent_28%),radial-gradient(circle_at_18%_90%,rgba(33,144,255,0.12),transparent_32%)]" />
       <div className="relative flex h-dvh min-h-0 overflow-hidden">
         {showSidebar ? (

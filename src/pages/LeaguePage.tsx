@@ -10,10 +10,19 @@ import { LeagueTodayPredictions } from "@/components/league/LeagueTodayPredictio
 import { LeagueTopAgentsPanel } from "@/components/league/LeagueTopAgentsPanel";
 import { LeagueUpcomingCarousel } from "@/components/league/LeagueUpcomingCarousel";
 import { LeagueYourLineup } from "@/components/league/LeagueYourLineup";
+import { isTelegramMiniApp } from "@/lib/telegramMiniApp";
 
 const LeaguePage = () => {
+  const telegramMode = isTelegramMiniApp();
+
   return (
-    <div className="min-w-0 w-full max-w-full overflow-x-hidden px-3 py-3 sm:px-6 lg:px-8">
+    <div
+      className={`min-w-0 w-full max-w-full overflow-x-hidden ${
+        telegramMode
+          ? "telegram-arena-page px-2 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+          : "px-3 py-3 sm:px-6 lg:px-8"
+      }`}
+    >
       <LeaguePageHeader />
 
       <div className="grid w-full min-w-0 grid-cols-1 items-start gap-2.5 lg:grid-cols-12 lg:gap-3">

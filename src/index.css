@@ -99,6 +99,106 @@
   }
 }
 
+html.telegram-mini-app,
+html.telegram-mini-app body,
+html.telegram-mini-app #root {
+  height: var(--tg-viewport-height, 100dvh);
+  min-height: var(--tg-viewport-height, 100dvh);
+  overscroll-behavior: none;
+}
+
+html.telegram-mini-app body {
+  overflow: hidden;
+  background: #03070d;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.telegram-app-shell,
+.telegram-app-shell > div {
+  height: var(--tg-viewport-height, 100dvh);
+}
+
+.telegram-app-shell .arena-scroll {
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-top: env(safe-area-inset-top);
+}
+
+/* Push the top bar clear of the Telegram header / device notch. */
+html.telegram-mini-app .dashboard-topbar {
+  padding-top: env(safe-area-inset-top);
+}
+
+.telegram-arena-page button,
+.telegram-arena-page a,
+.telegram-app-shell button,
+.telegram-app-shell a {
+  touch-action: manipulation;
+}
+
+@media (max-width: 767px) {
+  .telegram-arena-page .telegram-arena-hero {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .telegram-arena-page .telegram-arena-hero-mobile {
+    height: min(165vw, calc(var(--tg-viewport-height, 100dvh) - env(safe-area-inset-top)));
+    min-height: 560px;
+    max-height: 760px;
+  }
+
+  .telegram-arena-page section {
+    scroll-margin-top: env(safe-area-inset-top);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .telegram-mini-app .telegram-arena-hero {
+    min-height: max(420px, var(--tg-viewport-height, 100dvh));
+  }
+
+  .telegram-mini-app .telegram-arena-hero-mobile {
+    height: max(420px, var(--tg-viewport-height, 100dvh));
+    min-height: 420px;
+    max-height: 540px;
+  }
+
+  .telegram-mini-app .telegram-arena-hero-desktop {
+    min-height: max(420px, var(--tg-viewport-height, 100dvh));
+    padding-top: max(1rem, env(safe-area-inset-top));
+    padding-bottom: 1.25rem;
+    justify-content: flex-start;
+  }
+
+  .telegram-mini-app .telegram-arena-hero-copy {
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .telegram-mini-app .telegram-arena-attribution {
+    margin-bottom: 0.75rem;
+  }
+
+  .telegram-mini-app .telegram-arena-hero h1 {
+    font-size: clamp(2.25rem, 8vw, 3.5rem);
+  }
+
+  .telegram-mini-app .telegram-arena-hero h2 {
+    margin-top: 0.5rem;
+    font-size: clamp(1rem, 3.5vw, 1.5rem);
+  }
+
+  .telegram-mini-app .telegram-arena-hero p {
+    margin-top: 0.625rem;
+  }
+
+  .telegram-mini-app .telegram-arena-hero video {
+    object-position: center 22%;
+  }
+}
+
 @layer components {
   .glass-panel {
     @apply border border-border/50 backdrop-blur-md;

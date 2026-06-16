@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Send, X, User, Loader2, Sparkles, MessageSquare, GitCompare, Gamepad2, ArrowRight, Shield } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import KultAIMessageContent from "@/components/KultAIMessageContent";
 import { KultAiBotAvatar } from "@/components/KultAiBotAvatar";
 import { useKultAIChat } from "@/hooks/useKultAIChat";
@@ -13,10 +13,18 @@ const quickPrompts = [
   { icon: Gamepad2, text: "What's trending on 0G?" },
 ];
 
+/** Small threshold (px) to distinguish a tap from a drag */
+const DRAG_THRESHOLD = 6;
+
 const KultAIFloating = () => {
   const [open, setOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { error, input, isStreaming, isWaitingForFirstChunk, messages, sendMessage, setInput, computeSessionId } = useKultAIChat();
+
+  // ── Drag state ───────────────────────────────────────────────────────────
+  const constraintsRef = useRef<HTMLDivElement>(null);
+  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
+  const wasDragged = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -27,21 +35,53 @@ const KultAIFloating = () => {
     void sendMessage();
   };
 
+  const handlePointerDown = useCallback((e: React.PointerEvent | PointerEvent) => {
+    dragStartPos.current = { x: e.clientX, y: e.clientY };
+    wasDragged.current = false;
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    // If we moved more than DRAG_THRESHOLD, mark as dragged so the click is suppressed
+    wasDragged.current = true;
+  }, []);
+
+  const handleClick = useCallback(() => {
+    if (!wasDragged.current) {
+      setOpen(true);
+    }
+    wasDragged.current = false;
+  }, []);
+
   return (
     <>
-      {/* Floating launcher — gradient bezel + glass + ambient glow */}
+      {/* Full-viewport drag constraint layer (invisible) */}
+      <div
+        ref={constraintsRef}
+        className="pointer-events-none fixed inset-0 z-40"
+        aria-hidden="true"
+      />
+
+      {/* Floating launcher — gradient bezel + glass + ambient glow — NOW DRAGGABLE */}
       <AnimatePresence>
         {!open && (
-          <motion.button
-            type="button"
+          <motion.div
+            drag
+            dragConstraints={constraintsRef}
+            dragElastic={0.08}
+            dragMomentum={false}
+            dragTransition={{ bounceStiffness: 300, bounceDamping: 20 }}
+            onPointerDown={handlePointerDown}
+            onDragEnd={handleDragEnd}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.06, y: -2 }}
+            whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.96 }}
-            onClick={() => setOpen(true)}
-            aria-label="Open KULT AI chat"
-            className="group fixed bottom-28 right-5 z-50 h-16 w-16 outline-none focus-visible:ring-2 focus-visible:ring-neon-cyan/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-6 sm:right-6"
+            onClick={handleClick}
+            role="button"
+            tabIndex={0}
+            aria-label="Open KULT AI chat — drag to reposition"
+            className="group fixed bottom-28 right-5 z-50 h-16 w-16 cursor-grab active:cursor-grabbing outline-none focus-visible:ring-2 focus-visible:ring-neon-cyan/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:bottom-6 sm:right-6 touch-none select-none"
           >
             {/* Soft breathing halo */}
             <motion.div
@@ -64,7 +104,7 @@ const KultAIFloating = () => {
                 />
               </div>
             </div>
-          </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
 

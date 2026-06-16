@@ -52,6 +52,7 @@ import battleStep3 from "@/assets/step3.mp4";
 import battleStep5 from "@/assets/step5.mp4";
 import type { AiArenaAgent, AiArenaAgentMemory, AiArenaBattle } from "@/types/aiArenaGateway";
 import { RANKS } from "@/utils/rankSystem";
+import { isTelegramMiniApp, telegramImpact } from "@/lib/telegramMiniApp";
 
 const arenaGames = [
   {
@@ -199,8 +200,16 @@ const AIArenaPage = () => {
 export default AIArenaPage;
 
 function AIArenaPageContent() {
+  const telegramMode = isTelegramMiniApp();
+
   return (
-    <div className="min-h-full text-foreground bg-background min-w-0 mx-auto w-full px-4 py-5 sm:px-6 lg:px-8 max-w-full">
+    <div
+      className={`min-h-full text-foreground bg-background min-w-0 mx-auto w-full max-w-full ${
+        telegramMode
+          ? "telegram-arena-page px-0 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+          : "px-4 py-5 sm:px-6 lg:px-8"
+      }`}
+    >
       <Hero />
       <StatsBar />
       <FeaturesBlock />
@@ -551,6 +560,9 @@ function ArenaHeroMatchmakingAction({ compact = false }: { compact?: boolean }) 
     (!isAiArenaReady || myAgentsQ.isLoading || !!queuedAgent);
 
   const handleArenaAction = () => {
+    if (isTelegramMiniApp()) {
+      telegramImpact("medium");
+    }
     if (!isAuthenticated) {
       login();
       return;
@@ -686,7 +698,7 @@ function ArenaHeroMatchmakingAction({ compact = false }: { compact?: boolean }) 
 
 function Hero() {
   return (
-    <section className="arena-panel relative overflow-hidden border border-white/8 bg-[#04080f] min-h-[500px]">
+    <section className="arena-panel telegram-arena-hero relative overflow-hidden border border-white/8 bg-[#04080f] min-h-[500px]">
       <div className="absolute inset-0 hidden md:block">
         <video
           aria-hidden
@@ -703,7 +715,7 @@ function Hero() {
       </div>
       {/* original line kept — bg-black was added intentionally by another dev, commented out to fix black rectangle artifact */}
       {/* <div className="relative md:hidden min-h-[640px] h-[185vw] max-h-[880px] bg-black"> */}
-      <div className="relative md:hidden min-h-[640px] h-[185vw] max-h-[880px]">
+      <div className="telegram-arena-hero-mobile relative md:hidden min-h-[640px] h-[185vw] max-h-[880px]">
         <video
           aria-hidden
           autoPlay
@@ -716,8 +728,8 @@ function Hero() {
           <source src={heroVideo} type="video/mp4" />
         </video>
         <div className="absolute inset-x-0 top-0 h-[56%] bg-gradient-to-b from-black via-black/75 to-transparent" />
-        <div className="relative z-10 px-4 sm:px-6 pt-5">
-          <div className="flex flex-wrap items-center gap-3 text-[9px] font-tech uppercase tracking-[0.2em] text-white/50 mb-8">
+        <div className="telegram-arena-hero-copy relative z-10 px-4 sm:px-6 pt-5">
+          <div className="telegram-arena-attribution flex flex-wrap items-center gap-3 text-[9px] font-tech uppercase tracking-[0.2em] text-white/50 mb-8">
             <span className="flex items-center gap-1.5">
               Presented by <KultLogo className="h-3.5 w-auto" />
             </span>
@@ -728,8 +740,8 @@ function Hero() {
           <HeroCopy compact />
         </div>
       </div>
-      <div className="relative mx-auto hidden md:flex md:flex-col px-6 pt-8 pb-32 min-h-[680px] justify-center">
-        <div className="flex flex-wrap items-center gap-3 text-[9px] font-tech uppercase tracking-[0.2em] text-white/50 mb-8">
+      <div className="telegram-arena-hero-desktop relative mx-auto hidden md:flex md:flex-col px-6 pt-8 pb-32 min-h-[680px] justify-center">
+        <div className="telegram-arena-attribution flex flex-wrap items-center gap-3 text-[9px] font-tech uppercase tracking-[0.2em] text-white/50 mb-8">
           <span className="flex items-center gap-1.5">
             Presented by <KultLogo className="h-3.5 w-auto" />
           </span>
@@ -1653,11 +1665,11 @@ function ArenaLandingFooter() {
 
           {/* Col 2 */}
           <nav
-            className="group/explore flex flex-col justify-center border-white/8 transition duration-300 hover:border-[#7d5cff]/35 lg:min-h-[168px] lg:border-x lg:px-6"
+            className="group/explore flex flex-col items-center justify-center border-white/8 text-center transition duration-300 hover:border-[#7d5cff]/35 lg:min-h-[168px] lg:items-start lg:border-x lg:px-6 lg:text-left"
             aria-label="Footer navigation"
           >
             <p className="mb-5 font-tech text-[12px] font-black uppercase tracking-[0.46em] text-[#a790ff] transition duration-300 group-hover/explore:text-[#d8c7ff] group-hover/explore:drop-shadow-[0_0_10px_rgba(167,144,255,0.55)]">EXPLORE</p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
               {platformLinks.map((link) => {
                 const Icon = link.icon;
                 return link.href.startsWith("http") ? (
@@ -1686,12 +1698,12 @@ function ArenaLandingFooter() {
           </nav>
 
           {/* Col 3 */}
-          <div className="group/social flex flex-col justify-center gap-7 lg:min-h-[168px] lg:items-start">
-            <div>
+          <div className="group/social flex flex-col items-center justify-center gap-7 lg:min-h-[168px] lg:items-start">
+            <div className="text-center lg:text-left">
               <p className="mb-5 font-tech text-[12px] font-black uppercase tracking-[0.46em] text-[#a790ff] transition duration-300 group-hover/social:text-[#d8c7ff] group-hover/social:drop-shadow-[0_0_10px_rgba(167,144,255,0.55)]">
                 FOLLOW
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
                 {socials.map((s) => (
                   <a
                     key={s.key}

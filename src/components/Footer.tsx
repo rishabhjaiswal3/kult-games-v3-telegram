@@ -74,11 +74,11 @@ const Footer = () => {
           </div>
 
           <nav
-            className="group/explore flex flex-col justify-center border-white/8 transition duration-300 hover:border-[#7d5cff]/35 lg:min-h-[168px] lg:border-x lg:px-6"
+            className="group/explore flex flex-col items-center justify-center border-white/8 text-center transition duration-300 hover:border-[#7d5cff]/35 lg:min-h-[168px] lg:items-start lg:border-x lg:px-6 lg:text-left"
             aria-label="Footer navigation"
           >
             <p className="mb-5 font-tech text-[12px] font-black uppercase tracking-[0.46em] text-[#a790ff] transition duration-300 group-hover/explore:text-[#d8c7ff] group-hover/explore:drop-shadow-[0_0_10px_rgba(167,144,255,0.55)]">EXPLORE</p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
               {platformLinks.map((link) => {
                 const Icon = link.icon;
                 return (
@@ -95,12 +95,12 @@ const Footer = () => {
             </div>
           </nav>
 
-          <div className="group/social flex flex-col justify-center gap-7 lg:min-h-[168px] lg:items-start">
-            <div>
+          <div className="group/social flex flex-col items-center justify-center gap-7 lg:min-h-[168px] lg:items-start">
+            <div className="text-center lg:text-left">
               <p className="mb-5 font-tech text-[12px] font-black uppercase tracking-[0.46em] text-[#a790ff] transition duration-300 group-hover/social:text-[#d8c7ff] group-hover/social:drop-shadow-[0_0_10px_rgba(167,144,255,0.55)]">
                 FOLLOW KULT GAMES
               </p>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap justify-center gap-3 lg:justify-start">
                 {socials.map((s) => (
                   <a
                     key={s.key}
