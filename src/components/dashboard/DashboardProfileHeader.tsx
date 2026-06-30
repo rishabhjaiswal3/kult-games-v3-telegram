@@ -54,8 +54,8 @@ export function DashboardProfileHeader({ profile, isLoading, walletAddress }: Da
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:max-w-xl">
           {[
             { label: "Level", value: profile?.level ?? "—" },
-            { label: "Rank", value: profile?.rank != null ? `#${profile.rank}` : "—" },
-            { label: "Total score", value: profile ? profile.totalScore.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—" },
+            { label: "KP Rank", value: profile?.kultPointsRank != null ? `#${profile.kultPointsRank}` : "—" },
+            { label: "KULT Points", value: profile ? profile.kultPoints.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—" },
             { label: "Games played", value: profile?.totalGamesPlayed ?? "—" },
           ].map((stat) => (
             <div key={stat.label} className="relative overflow-hidden rounded-lg border border-white/[0.08] bg-[#0a0f1b]/50 px-3 py-2.5 text-center backdrop-blur-sm transition-transform duration-300 hover:-translate-y-0.5 hover:border-[#c78aff]/30 hover:bg-[#111626]/70 hover:shadow-[0_4px_20px_rgba(154,53,255,0.1)]">

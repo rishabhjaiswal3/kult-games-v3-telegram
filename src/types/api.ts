@@ -59,6 +59,8 @@ export interface PlayerProfileStats {
   walletAddress: string;
   username: string;
   rank: number | null;
+  kultPoints: number;
+  kultPointsRank: number | null;
   totalScore: number;
   level: number;
   totalGamesPlayed: number;
@@ -76,6 +78,8 @@ export interface FullPlayerProfile {
   player: Player;
   cached: boolean;
   rank: number | null;
+  kultPoints: number;
+  kultPointsRank: number | null;
   totalScore: number;
   level: number;
   totalGamesPlayed: number;

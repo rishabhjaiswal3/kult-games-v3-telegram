@@ -38,6 +38,8 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
       player: { _id: "", wallet_address: "", name: "" },
       cached: false,
       rank: null,
+      kultPoints: 0,
+      kultPointsRank: null,
       totalScore: 0,
       level: 1,
       totalGamesPlayed: 0,
@@ -63,6 +65,11 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
       walletAddress: nested.walletAddress,
       username: String(nested.username ?? ""),
       rank: nested.rank == null ? null : Number(nested.rank),
+      kultPoints: Number(nested.kultPoints ?? nested.kult_points ?? nested.totalScore ?? nested.total_score ?? 0),
+      kultPointsRank:
+        nested.kultPointsRank == null && nested.kult_points_rank == null
+          ? null
+          : Number(nested.kultPointsRank ?? nested.kult_points_rank),
       totalScore: Number(nested.totalScore ?? nested.total_score ?? 0),
       level: Number(nested.level ?? 1),
       totalGamesPlayed: Number(nested.totalGamesPlayed ?? nested.total_games_played ?? 0),
@@ -79,6 +86,8 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
       },
       cached: Boolean(raw.cached),
       rank: stats.rank,
+      kultPoints: stats.kultPoints,
+      kultPointsRank: stats.kultPointsRank,
       totalScore: stats.totalScore,
       level: stats.level,
       totalGamesPlayed: stats.totalGamesPlayed,
@@ -102,6 +111,11 @@ function parseProfilePayload(raw: unknown): FullPlayerProfile {
     },
     cached: false,
     rank: null,
+    kultPoints: Number(raw.kultPoints ?? raw.kult_points ?? 0),
+    kultPointsRank:
+      raw.kultPointsRank == null && raw.kult_points_rank == null
+        ? null
+        : Number(raw.kultPointsRank ?? raw.kult_points_rank),
     totalScore: 0,
     level: 1,
     totalGamesPlayed: 0,
